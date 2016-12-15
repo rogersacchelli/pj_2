@@ -19,7 +19,7 @@ tf.app.flags.DEFINE_integer('IMAGE_WIDTH', '32', 'IMAGE WIDTH SIZE')
 tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 
 # DATASET INFO
-tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '32', 'NUMBER OF CLASSES')
+tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
 learning_rate = 0.001
@@ -37,7 +37,7 @@ layer_width = {
 # Store layers weight & bias
 weights = {
     'layer_1': tf.Variable(tf.truncated_normal(
-        [5, 5, 1, layer_width['layer_1']], stddev=0.1)),
+        [5, 5, 3, layer_width['layer_1']], stddev=0.1)),
     'layer_2': tf.Variable(tf.truncated_normal(
         [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
     'layer_3': tf.Variable(tf.truncated_normal(
@@ -54,7 +54,6 @@ biases = {
     'fully_connected': tf.Variable(tf.zeros(layer_width['fully_connected'])),
     'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
 }
-
 
 def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
                 test=os.path.join(FLAGS.dataset_dir, FLAGS.test)):
@@ -92,6 +91,16 @@ def normalize_images(train, test):
                                                                                FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
 
     return train, test
+
+
+def sparse_to_dense(dataset):
+    sp2dense = np.zeros(shape=(len(dataset['labels']), FLAGS.NUM_OF_CLASSES))
+    for i in range(len(dataset['labels'])):
+        sp2dense[i, dataset['labels'][i]] = 1
+
+    dataset['labels'] = sp2dense
+
+    return dataset
 
 
 def shuffle_dataset(dataset):
@@ -162,8 +171,8 @@ def cnn(x, w, b, s=1):
         b['fully_connected'])
     fc1 = tf.nn.tanh(fc1)
 
-    # Output Layer - class prediction - 512 to 10
-    out = tf.add(tf.matmul(fc1, w['out']), w['out'])
+    # Output Layer - class prediction - 512 to 32
+    out = tf.add(tf.matmul(fc1, w['out']), b['out'])
     return out
 
 
@@ -173,6 +182,10 @@ def main():
 
     # NORMALIZING DATA TO IMPROVE SGD CONVERGENCE
     train_data, test_data = normalize_images(train_data, test_data)
+
+    # TRANSFORM SPARSE LABELS MATRIX TO DENSE MATRIX
+    train_data = sparse_to_dense(train_data)
+    test_data = sparse_to_dense(test_data)
 
     # SHUFFLING TRAINING DATA SET TO IMPROVE ACCURACY
     train_data = shuffle_dataset(train_data)
@@ -184,6 +197,26 @@ def main():
         input = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
         labels = tf.placeholder(tf.float32, shape=(None, FLAGS.NUM_OF_CLASSES))
 
+        weights = {
+            'layer_1': tf.Variable(tf.truncated_normal(
+                [5, 5, 3, layer_width['layer_1']], stddev=0.1)),
+            'layer_2': tf.Variable(tf.truncated_normal(
+                [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
+            'layer_3': tf.Variable(tf.truncated_normal(
+                [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.1)),
+            'fully_connected': tf.Variable(tf.truncated_normal(
+                [4 * 4 * 128, layer_width['fully_connected']])),
+            'out': tf.Variable(tf.truncated_normal(
+                [layer_width['fully_connected'], FLAGS.NUM_OF_CLASSES]))
+        }
+        biases = {
+            'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
+            'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
+            'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
+            'fully_connected': tf.Variable(tf.zeros(layer_width['fully_connected'])),
+            'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
+        }
+
         logits = cnn(input, weights, biases)
 
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, labels))
@@ -194,30 +227,32 @@ def main():
         init = tf.initialize_all_variables()
 
     # Launch the graph
-    with tf.Session() as sess:
-        sess.run(init)
-        # Training cycle
-        offset = 0
-        for epoch in range(training_epochs):
-            total_batch = int(len(train_data['features']) / batch_size)
-            # Loop over all batches
-            for i in range(total_batch):
-                batch_x = train_data['features'][offset:(i * batch_size)]
-                batch_y = train_data['labels'][offset:(i * batch_size)]
-                # Run optimization op (backprop) and cost op (to get loss value)
-                sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y})
-            # Display logs per epoch step
-            c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y})
-            print("Epoch:", '%04d' % (epoch + 1), "cost=", "{:.9f}".format(c))
-        print("Optimization Finished!")
+        with tf.Session() as sess:
+            sess.run(init)
+            # Training cycle
+            offset = 0
+            for epoch in range(training_epochs):
+                total_batch = int(len(train_data['features']) / batch_size)
+                # Loop over all batches
+                for i in range(total_batch):
+                    batch_x = train_data['features'][offset:(i * batch_size)]
+                    batch_y = train_data['labels'][offset:(i * batch_size)]
+                    # Run optimization op (backprop) and cost op (to get loss value)
+                    sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y})
+                    if i % 10 == 0:
+                        # Display logs per epoch step
+                        c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y})
+                        print("Epoch:", '%04d' % (epoch + 1), "cost=", "{:.9f}".format(c))
 
-        # Test model
-        correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
-        # Calculate accuracy
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-        print(
-            "Accuracy:",
-            accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
+            print("Optimization Finished!")
+
+            # Test model
+            correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
+            # Calculate accuracy
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+            print(
+                "Accuracy:",
+                accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
 
 
 if __name__ == '__main__':
