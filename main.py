@@ -3,15 +3,20 @@ import pickle
 import os
 import numpy as np
 import random
-import matplotlib as plt
+import argparse as argp
+
+__autor__ = "Roger S. Sacchelli - roger.sacchelli@gmail.com"
+
+__doc__ = """
+    -----------------------------------------------
+    ------- Project 2 | Self-driving Car ND -------
+    ----- Classifying Traffic Signs with CNN ------
+    -----------------------------------------------
+    """
+
 
 # FLAGS
 FLAGS = tf.app.flags.FLAGS
-
-# FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
-tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
-tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
 
 # IMAGE INFO FLAGS
 tf.app.flags.DEFINE_integer('IMAGE_HEIGHT', '32', 'IMAGE HEIGHT SIZE')
@@ -22,9 +27,17 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-learning_rate = 0.001
-batch_size = 128
-training_epochs = 30
+tf.app.flags.DEFINE_float('learning_rate', '0.001', 'Learning Rate')
+tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
+tf.app.flags.DEFINE_integer('epoch_size', '30', 'Epoch Size')
+
+# FILE HANDLING FLAGS
+tf.app.flags.DEFINE_string('check', 'checkpoint/model_1.ckpt', 'File name for model saving')
+
+tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
+tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
+tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
+
 
 
 layer_width = {
@@ -54,6 +67,7 @@ biases = {
     'fully_connected': tf.Variable(tf.zeros(layer_width['fully_connected'])),
     'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
 }
+
 
 def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
                 test=os.path.join(FLAGS.dataset_dir, FLAGS.test)):
@@ -177,6 +191,7 @@ def cnn(x, w, b, s=1):
 
 
 def main():
+
     # UNPICKLING DATA FROM FILES
     train_data, test_data = read_pickle()
 
@@ -220,8 +235,12 @@ def main():
         logits = cnn(input, weights, biases)
 
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, labels))
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate) \
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate=FLAGS.learning_rate) \
             .minimize(cost)
+
+        # Create saving object
+
+        saver = tf.train.Saver()
 
         # Initializing the variables
         init = tf.initialize_all_variables()
@@ -229,21 +248,32 @@ def main():
     # Launch the graph
         with tf.Session() as sess:
             sess.run(init)
+
+            # Check for saved models
+            if os.path.exists(os.path.join(os.curdir, FLAGS.check)):
+                saver.restore(sess, os.path.join(os.curdir, FLAGS.check))
+                print("Model Loaded")
+            else:
+                # If file does not exist, create dir not returning exception if dir exists
+                os.makedirs(os.path.join(os.path.curdir, 'checkpoint'), exist_ok=True)
+
             # Training cycle
             offset = 0
-            for epoch in range(training_epochs):
-                total_batch = int(len(train_data['features']) / batch_size)
+            for epoch in range(FLAGS.epoch_size):
+                total_batch = int(len(train_data['features']) / FLAGS.learning_rate)
                 # Loop over all batches
                 for i in range(total_batch):
-                    batch_x = train_data['features'][offset:(i * batch_size)]
-                    batch_y = train_data['labels'][offset:(i * batch_size)]
+                    batch_x = train_data['features'][offset:(i * FLAGS.batch_size)]
+                    batch_y = train_data['labels'][offset:(i * FLAGS.batch_size)]
                     # Run optimization op (backprop) and cost op (to get loss value)
                     sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y})
-                    if i % 10 == 0:
+                    if i % 50 == 0:
                         # Display logs per epoch step
                         c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y})
-                        print("Epoch:", '%04d' % (epoch + 1), "cost=", "{:.9f}".format(c))
-
+                        print("Epoch:", '%04d' % (epoch + 1), "batch:", i, "cost =", "{:.9f}".format(c))
+                        # Save model state
+                        saver.save(sess, os.path.join(os.curdir, FLAGS.check))
+                        print("Model Saved")
             print("Optimization Finished!")
 
             # Test model
