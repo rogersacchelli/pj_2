@@ -28,46 +28,28 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('learning_rate', '0.01', 'Learning Rate')
+tf.app.flags.DEFINE_float('learning_rate', '0.1', 'Learning Rate')
 tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
 tf.app.flags.DEFINE_integer('epoch_size', '30', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_4_tanh_2_fc_drop_all.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
 tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
 
 
-
 layer_width = {
     'layer_1': 32,
     'layer_2': 64,
     'layer_3': 128,
-    'fully_connected': 512
+    'layer_4': 256,
+    'fully_connected_1': 1024,
+    'fully_connected_2': 512
 }
 
 # Store layers weight & bias
-weights = {
-    'layer_1': tf.Variable(tf.truncated_normal(
-        [5, 5, 3, layer_width['layer_1']], stddev=0.1)),
-    'layer_2': tf.Variable(tf.truncated_normal(
-        [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
-    'layer_3': tf.Variable(tf.truncated_normal(
-        [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.1)),
-    'fully_connected': tf.Variable(tf.truncated_normal(
-        [4*4*128, layer_width['fully_connected']])),
-    'out': tf.Variable(tf.truncated_normal(
-        [layer_width['fully_connected'], FLAGS.NUM_OF_CLASSES]))
-}
-biases = {
-    'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
-    'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
-    'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
-    'fully_connected': tf.Variable(tf.zeros(layer_width['fully_connected'])),
-    'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
-}
 
 
 def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
@@ -103,9 +85,9 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
           ((img_dim[0] * img_dim[1] * img_dim[2]) / 1024e2) * n_train * 4, 'MB')
 
     # Multiplot All Classes
-    plt.subplot()
-    for i in range(n_classes):
+    # plt.imshow(train_dict['features'][0])
 
+    # plt.show()
 
     return train_dict, test_dict
 
@@ -200,21 +182,33 @@ def cnn(x, w, b, s=1, dropout=0.5):
     conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
     conv3 = maxpool_2d(conv3)
 
-    # Fully connected layer - 4*4*128 to 512
-    # Reshape conv3 output to fit fully connected layer input
+    # layer 4 - 4x4x128 - 2x2x256
+    conv4 = conv_2d(conv3, w['layer_4'], b['layer_4'], s)
+    conv4 = maxpool_2d(conv4)
+
+    # Fully connected layer 1 - 2*2*256 to 1024
     fc1 = tf.reshape(
-        conv3,
-        [-1, w['fully_connected'].get_shape().as_list()[0]])
+        conv4,
+        [-1, w['fully_connected_1'].get_shape().as_list()[0]])
     fc1 = tf.add(
-        tf.matmul(fc1, w['fully_connected']),
-        b['fully_connected'])
+        tf.matmul(fc1, w['fully_connected_1']),
+        b['fully_connected_1'])
     fc1 = tf.nn.tanh(fc1)
 
+    # Dropout regularization for FC 1
+    drop_fc1 = tf.nn.dropout(fc1, dropout)
+
+    # Fully connected layer 2 - 1024 to 512
+    fc2 = tf.add(
+        tf.matmul(drop_fc1, w['fully_connected_2']),
+        b['fully_connected_2'])
+    fc2 = tf.nn.tanh(fc2)
+
     # Dropout for regularization
-    drop_fc = tf.nn.dropout(fc1, dropout)
+    drop_fc2 = tf.nn.dropout(fc2, dropout)
 
     # Output Layer - class prediction - 512 to 43
-    out = tf.add(tf.matmul(drop_fc, w['out']), b['out'])
+    out = tf.add(tf.matmul(drop_fc2, w['out']), b['out'])
     return out
 
 
@@ -247,16 +241,22 @@ def main():
                 [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
             'layer_3': tf.Variable(tf.truncated_normal(
                 [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.1)),
-            'fully_connected': tf.Variable(tf.truncated_normal(
-                [4 * 4 * 128, layer_width['fully_connected']])),
+            'layer_4': tf.Variable(tf.truncated_normal(
+                [5, 5, layer_width['layer_3'], layer_width['layer_4']], stddev=0.1)),
+            'fully_connected_1': tf.Variable(tf.truncated_normal(
+                [2 * 2 * 256, layer_width['fully_connected_1']])),
+            'fully_connected_2': tf.Variable(tf.truncated_normal(
+                [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
             'out': tf.Variable(tf.truncated_normal(
-                [layer_width['fully_connected'], FLAGS.NUM_OF_CLASSES]))
+                [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
         }
         biases = {
             'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
             'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
             'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
-            'fully_connected': tf.Variable(tf.zeros(layer_width['fully_connected'])),
+            'layer_4': tf.Variable(tf.zeros(layer_width['layer_4'])),
+            'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
+            'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
             'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
         }
 
