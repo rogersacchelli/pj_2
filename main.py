@@ -3,7 +3,7 @@ import pickle
 import os
 import numpy as np
 import random
-import argparse as argp
+import time
 
 __autor__ = "Roger S. Sacchelli - roger.sacchelli@gmail.com"
 
@@ -27,12 +27,12 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('learning_rate', '0.001', 'Learning Rate')
+tf.app.flags.DEFINE_float('learning_rate', '0.01', 'Learning Rate')
 tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
 tf.app.flags.DEFINE_integer('epoch_size', '30', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/model_1.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
@@ -81,6 +81,25 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
 
     with open(test, mode='rb') as f:
         test_dict = pickle.load(f)
+
+    n_train = len(train_dict['features'])
+    n_test = len(test_dict['features'])
+    img_dim = train_dict['features'][0].shape
+    n_classes = np.max(train_dict['labels'][:])
+
+    print("Number of training examples =", n_train)
+    print("Number of testing examples =", n_test)
+    print("Image data shape =", img_dim)
+    print("Number of classes =", n_classes)
+
+    # Print number of examples per class
+    for i in range(n_classes):
+        print("\t Class %d:" % i, np.sum(train_dict['labels'][:] == i))
+
+    # Calculate Memory for whole set of training
+    # Every feature will be mapped to float (4 Bytes)
+    print("Required Memory for training dataset: ",
+          ((img_dim[0] * img_dim[1] * img_dim[2]) / 1024e2) * n_train * 4, 'MB')
 
     return train_dict, test_dict
 
@@ -188,7 +207,7 @@ def cnn(x, w, b, s=1, dropout=0.5):
     # Dropout for regularization
     drop_fc = tf.nn.dropout(fc1, dropout)
 
-    # Output Layer - class prediction - 512 to 32
+    # Output Layer - class prediction - 512 to 43
     out = tf.add(tf.matmul(drop_fc, w['out']), b['out'])
     return out
 
@@ -261,20 +280,28 @@ def main():
                 os.makedirs(os.path.join(os.path.curdir, 'checkpoint'), exist_ok=True)
 
             # Training cycle
-            offset = 0
+
             for epoch in range(FLAGS.epoch_size):
-                total_batch = int(len(train_data['features']) / FLAGS.learning_rate)
+                total_batch = int(len(train_data['features']) / FLAGS.batch_size)
                 # Loop over all batches
                 for i in range(total_batch):
-                    batch_x = train_data['features'][offset:(i * FLAGS.batch_size)]
-                    batch_y = train_data['labels'][offset:(i * FLAGS.batch_size)]
+                    start_time = time.time()
+                    start_batch_idx = i * FLAGS.batch_size
+                    end_batch_idx = start_batch_idx + FLAGS.batch_size
+                    batch_x = train_data['features'][start_batch_idx: end_batch_idx]
+                    batch_y = train_data['labels'][start_batch_idx: end_batch_idx]
                     keep_prob = tf.placeholder(tf.float32)
                     # Run optimization op (backprop) and cost op (to get loss value)
                     sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.5})
-                    if i % 10 == 0:
+                    if i % 10 == 1:
                         # Display logs per epoch step
                         c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.5})
-                        print("Epoch:", '%04d' % (epoch + 1), "batch:", i, "cost =", "{:.9f}".format(c))
+                        batch_time = time.time() - start_time
+                        print("Epoch:", '[%d' % (epoch + 1), '/%d]' % FLAGS.epoch_size,
+                              "| batch: [%d" % i, "of %d]" % total_batch,
+                              "| cost =", "{:.9f}".format(c),
+                              "| batch time: %03f" % batch_time,
+                              "| img/sec: %d" % int(batch_time * FLAGS.batch_size))
                         # Save model state
                         saver.save(sess, os.path.join(os.curdir, FLAGS.check))
                         print("Model Saved")
