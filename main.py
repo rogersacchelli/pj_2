@@ -267,22 +267,23 @@ def main():
                     batch_y = train_data['labels'][offset:(i * FLAGS.batch_size)]
                     # Run optimization op (backprop) and cost op (to get loss value)
                     sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y})
-                    if i % 50 == 0:
+                    if i % 10 == 0:
                         # Display logs per epoch step
                         c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y})
                         print("Epoch:", '%04d' % (epoch + 1), "batch:", i, "cost =", "{:.9f}".format(c))
                         # Save model state
                         saver.save(sess, os.path.join(os.curdir, FLAGS.check))
                         print("Model Saved")
+                # Test model
+                correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
+                # Calculate accuracy
+                accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+                print(
+                    "Accuracy:",
+                    accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
             print("Optimization Finished!")
 
-            # Test model
-            correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
-            # Calculate accuracy
-            accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-            print(
-                "Accuracy:",
-                accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
+
 
 
 if __name__ == '__main__':
