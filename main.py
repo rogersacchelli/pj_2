@@ -158,7 +158,7 @@ def maxpool_2d(x, k=2):
 
 
 # MODEL FOR CNN
-def cnn(x, w, b, s=1):
+def cnn(x, w, b, s=1, dropout=0.5):
     # CONVOLUTIONAL NEURAL NET
 
     """:param: input, weights, biases and strides"""
@@ -185,8 +185,11 @@ def cnn(x, w, b, s=1):
         b['fully_connected'])
     fc1 = tf.nn.tanh(fc1)
 
+    # Dropout for regularization
+    drop_fc = tf.nn.dropout(fc1, dropout)
+
     # Output Layer - class prediction - 512 to 32
-    out = tf.add(tf.matmul(fc1, w['out']), b['out'])
+    out = tf.add(tf.matmul(drop_fc, w['out']), b['out'])
     return out
 
 
@@ -265,11 +268,12 @@ def main():
                 for i in range(total_batch):
                     batch_x = train_data['features'][offset:(i * FLAGS.batch_size)]
                     batch_y = train_data['labels'][offset:(i * FLAGS.batch_size)]
+                    keep_prob = tf.placeholder(tf.float32)
                     # Run optimization op (backprop) and cost op (to get loss value)
-                    sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y})
+                    sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.5})
                     if i % 10 == 0:
                         # Display logs per epoch step
-                        c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y})
+                        c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.5})
                         print("Epoch:", '%04d' % (epoch + 1), "batch:", i, "cost =", "{:.9f}".format(c))
                         # Save model state
                         saver.save(sess, os.path.join(os.curdir, FLAGS.check))
@@ -282,8 +286,6 @@ def main():
                     "Accuracy:",
                     accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
             print("Optimization Finished!")
-
-
 
 
 if __name__ == '__main__':
