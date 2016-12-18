@@ -4,6 +4,7 @@ import os
 import numpy as np
 import random
 import time
+from matplotlib import pyplot as plt
 
 __autor__ = "Roger S. Sacchelli - roger.sacchelli@gmail.com"
 
@@ -100,6 +101,11 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     # Every feature will be mapped to float (4 Bytes)
     print("Required Memory for training dataset: ",
           ((img_dim[0] * img_dim[1] * img_dim[2]) / 1024e2) * n_train * 4, 'MB')
+
+    # Multiplot All Classes
+    plt.subplot()
+    for i in range(n_classes):
+
 
     return train_dict, test_dict
 
@@ -303,6 +309,7 @@ def main():
                               "| batch time: %03f" % batch_time,
                               "| img/sec: %d" % int(batch_time * FLAGS.batch_size))
                         # Save model state
+                    if i % 100 == 1:
                         saver.save(sess, os.path.join(os.curdir, FLAGS.check))
                         print("Model Saved")
                 # Test model
