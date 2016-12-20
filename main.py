@@ -33,7 +33,7 @@ tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
 tf.app.flags.DEFINE_integer('epoch_size', '50', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop_all_exp_lr_decay.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop_all_exp_lr_decay_relu.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
@@ -90,6 +90,54 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     return train_dict, test_dict
 
 
+def add_distortion(dataset):
+    # ADD DISTORTION RANDOMLY ADDS A SET OF IMAGE
+    # TRANSFORMATION TO INCREASE THE NUMBER OF EXAMPLES PER CLASS
+    # PROVIDING A IMPROVED DISTRIBUTION OF IMAGES PER CLASS
+
+    def _random_crop(image):
+        pass
+
+    def _random_brightness(image):
+        pass
+
+    def _flip_90_degrees_right(image):
+        pass
+
+    def _flip_90_degrees_left(image):
+        pass
+
+    def _flip_180_degrees(image):
+        pass
+
+    def _random_blur(image):
+        pass
+
+
+
+    samples_per_class = []
+    for i in range((np.max(dataset['labels'][:]) + 1)):
+        samples_per_class.append(np.sum(dataset['labels'] == i))
+
+    # AVG NUMBERS OF SAMPLES PER CLASS
+    avg_sample_per_class = int(np.mean(samples_per_class))
+
+    # STANDARD DEVIATION FOR DATASET - THE LOWER THE BEST
+    std_dev_dataset = int(np.std(samples_per_class))
+
+    # NUMBER OF SAMPLES TO ADD PER CLASS
+    samples_to_add_per_class = []
+    for i, v in enumerate(samples_per_class):
+        if v < avg_sample_per_class:
+            samples_to_add_per_class.append(std_dev_dataset)
+        else:
+            samples_to_add_per_class.append(0)
+
+
+
+
+
+
 def normalize_images(train, test):
     # THIS FUNCTION NORMALIZES IMAGES, COMPUTING:
     # (X - MEAN)/ADJUSTED_STD_DEV WHERE ADJUSTED_STD_DEV = max(ADJUSTED_STD_DEV, 1.0/sqrt(image.NumElements()))
@@ -100,14 +148,14 @@ def normalize_images(train, test):
 
     # NORMALIZATION
     for i in range(len(train['features'][:])):
-        train['features'][i] = (np.subtract((train['features'][i]), 127.) / (max(np.std((train['features'][i])),
-                                                                                 1. / (
-                                                                                 FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
+        train['features'][i] = (np.subtract((train['features'][i]), 127.) /
+                                (max(np.std((train['features'][i])),
+                                     1. / (FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
 
     for i in range(len(test['features'][:])):
-        test['features'][i] = (np.subtract((test['features'][i]), 127.) / (max(np.std((test['features'][i])),
-                                                                               1. / (
-                                                                               FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
+        test['features'][i] = (np.subtract((test['features'][i]), 127.) /
+                               (max(np.std((test['features'][i])),
+                                    1. / (FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
 
     return train, test
 
@@ -151,7 +199,8 @@ def shuffle_dataset(dataset):
 def conv_2d(x, W, b, strides=1):
     x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
     x = tf.nn.bias_add(x, b)
-    return tf.nn.tanh(x)
+    # return tf.nn.tanh(x)
+    return tf.nn.relu(x)
 
 
 def maxpool_2d(x, k=2):
@@ -200,12 +249,17 @@ def cnn(x, w, b, s=1, dropout=0.5):
     return out
 
 
+
+
 def main():
 
     main_start_time = time.time()
 
     # UNPICKLING DATA FROM FILES
     train_data, test_data = read_pickle()
+
+    # ADD DISTORTION AND GENERATE MORE SAMPLES
+    # train_data = add_distortion(train_data)
 
     # NORMALIZING DATA TO IMPROVE SGD CONVERGENCE
     train_data, test_data = normalize_images(train_data, test_data)
@@ -259,6 +313,8 @@ def main():
         optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
             .minimize(cost, global_step=global_step)
 
+        train_prediction = tf.nn.softmax(logits)
+
         # Create saving object
 
         saver = tf.train.Saver()
@@ -269,6 +325,10 @@ def main():
     # Launch the graph
         with tf.Session() as sess:
             sess.run(init)
+
+            def accuracy(predictions, labels):
+                return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
+                        / predictions.shape[0])
 
             # Check for saved models
             if os.path.exists(os.path.join(os.curdir, FLAGS.check)):
@@ -292,16 +352,18 @@ def main():
                     keep_prob = tf.placeholder(tf.float32)
                     # Run optimization op (backprop) and cost op (to get loss value)
                     sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
-                    if i % 10 == 1:
+                    if i % 50 == 1:
                         # Display logs per epoch step
-                        c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
+                        _, c, predictions = sess.run([optimizer, cost, train_prediction], feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
                         batch_time = time.time() - start_time
                         print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
                               "| batch: [%d" % i, "of %d]" % total_batch,
-                              "| cost =", "{:.9f}".format(c),
-                              "| batch time: %03f" % batch_time,
+                              "| cost =", "{:.3f}".format(c),
+                              "| accuracy =  %.03f" % accuracy(predictions, batch_y),
+                              "| batch time: %.03f" % batch_time,
                               "| img/sec: %d" % int(FLAGS.batch_size * batch_time),
                               "| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
+
                         # Save model state
                 saver.save(sess, os.path.join(os.curdir, FLAGS.check))
                 print("Model Saved")
