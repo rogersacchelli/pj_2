@@ -28,12 +28,12 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('learning_rate', '0.1', 'Learning Rate')
+tf.app.flags.DEFINE_float('start_learning_rate', '0.1', 'Start Learning Rate')
 tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
-tf.app.flags.DEFINE_integer('epoch_size', '30', 'Epoch Size')
+tf.app.flags.DEFINE_integer('epoch_size', '50', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_4_tanh_2_fc_drop_all.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop_all_exp_lr_decay.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
@@ -41,12 +41,10 @@ tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
 
 
 layer_width = {
-    'layer_1': 32,
-    'layer_2': 64,
-    'layer_3': 128,
-    'layer_4': 256,
-    'fully_connected_1': 1024,
-    'fully_connected_2': 512
+    'layer_1': 64,
+    'layer_2': 128,
+    'layer_3': 256,
+    'fully_connected_1': 512
 }
 
 # Store layers weight & bias
@@ -56,7 +54,7 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
                 test=os.path.join(FLAGS.dataset_dir, FLAGS.test)):
     # Unpickling data and load it on memory
     # Pickle file is structered as follows:
-    # train = {'coords':[ndarray], 'features':[ndarray], 'labels':[ndarray], 'sizes':[ndarray]}
+    # train = {'coords':[ndarray], '                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            features':[ndarray], 'labels':[ndarray], 'sizes':[ndarray]}
     # test = {'coords':[ndarray], 'features':[ndarray], 'labels':[ndarray], 'sizes':[ndarray]}
 
     with open(train, mode='rb') as f:
@@ -68,7 +66,7 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     n_train = len(train_dict['features'])
     n_test = len(test_dict['features'])
     img_dim = train_dict['features'][0].shape
-    n_classes = np.max(train_dict['labels'][:])
+    n_classes = np.max(train_dict['labels'][:]) + 1
 
     print("Number of training examples =", n_train)
     print("Number of testing examples =", n_test)
@@ -81,7 +79,7 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
-    print("Required Memory for training dataset: ",
+    print("Required Memory for validation whole dataset: ",
           ((img_dim[0] * img_dim[1] * img_dim[2]) / 1024e2) * n_train * 4, 'MB')
 
     # Multiplot All Classes
@@ -170,25 +168,21 @@ def cnn(x, w, b, s=1, dropout=0.5):
 
     """:param: input, weights, biases and strides"""
 
-    # layer 1 - 32x32x3 to 16x16x32
+    # layer 1 - 32x32x3 to 16x16x64
     conv1 = conv_2d(x, w['layer_1'], b['layer_1'], s)
     conv1 = maxpool_2d(conv1)
 
-    # layer 2 - 16x16x32 - 8x8x64
+    # layer 2 - 16x16x64 - 8x8x128
     conv2 = conv_2d(conv1, w['layer_2'], b['layer_2'], s)
     conv2 = maxpool_2d(conv2)
 
-    # layer 3 - 8x8x64 - 4x4x128
+    # layer 3 - 8x8x128 - 4x4x256
     conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
     conv3 = maxpool_2d(conv3)
 
-    # layer 4 - 4x4x128 - 2x2x256
-    conv4 = conv_2d(conv3, w['layer_4'], b['layer_4'], s)
-    conv4 = maxpool_2d(conv4)
-
-    # Fully connected layer 1 - 2*2*256 to 1024
+    # Fully connected layer 1 - 4*4*256 to 512
     fc1 = tf.reshape(
-        conv4,
+        conv3,
         [-1, w['fully_connected_1'].get_shape().as_list()[0]])
     fc1 = tf.add(
         tf.matmul(fc1, w['fully_connected_1']),
@@ -198,21 +192,17 @@ def cnn(x, w, b, s=1, dropout=0.5):
     # Dropout regularization for FC 1
     drop_fc1 = tf.nn.dropout(fc1, dropout)
 
-    # Fully connected layer 2 - 1024 to 512
-    fc2 = tf.add(
-        tf.matmul(drop_fc1, w['fully_connected_2']),
-        b['fully_connected_2'])
-    fc2 = tf.nn.tanh(fc2)
-
     # Dropout for regularization
-    drop_fc2 = tf.nn.dropout(fc2, dropout)
+    drop_fc1 = tf.nn.dropout(drop_fc1, dropout)
 
     # Output Layer - class prediction - 512 to 43
-    out = tf.add(tf.matmul(drop_fc2, w['out']), b['out'])
+    out = tf.add(tf.matmul(drop_fc1, w['out']), b['out'])
     return out
 
 
 def main():
+
+    main_start_time = time.time()
 
     # UNPICKLING DATA FROM FILES
     train_data, test_data = read_pickle()
@@ -241,30 +231,33 @@ def main():
                 [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
             'layer_3': tf.Variable(tf.truncated_normal(
                 [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.1)),
-            'layer_4': tf.Variable(tf.truncated_normal(
-                [5, 5, layer_width['layer_3'], layer_width['layer_4']], stddev=0.1)),
             'fully_connected_1': tf.Variable(tf.truncated_normal(
-                [2 * 2 * 256, layer_width['fully_connected_1']])),
-            'fully_connected_2': tf.Variable(tf.truncated_normal(
-                [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
+                [4 * 4 * 256, layer_width['fully_connected_1']])),
             'out': tf.Variable(tf.truncated_normal(
-                [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
+                [layer_width['fully_connected_1'], FLAGS.NUM_OF_CLASSES]))
         }
         biases = {
             'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
             'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
             'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
-            'layer_4': tf.Variable(tf.zeros(layer_width['layer_4'])),
             'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
-            'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
             'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
         }
 
         logits = cnn(input, weights, biases)
 
+        decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
+        global_step = tf.Variable(0, trainable=False)
+
+        leaning_rate = tf.train.exponential_decay(FLAGS.start_learning_rate,
+                                                  global_step=global_step,
+                                                  decay_steps=decay_steps,
+                                                  decay_rate=1e-3,
+                                                  staircase=False)
+
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, labels))
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=FLAGS.learning_rate) \
-            .minimize(cost)
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
+            .minimize(cost, global_step=global_step)
 
         # Create saving object
 
@@ -298,20 +291,20 @@ def main():
                     batch_y = train_data['labels'][start_batch_idx: end_batch_idx]
                     keep_prob = tf.placeholder(tf.float32)
                     # Run optimization op (backprop) and cost op (to get loss value)
-                    sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.5})
+                    sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
                     if i % 10 == 1:
                         # Display logs per epoch step
-                        c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.5})
+                        c = sess.run(cost, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
                         batch_time = time.time() - start_time
-                        print("Epoch:", '[%d' % (epoch + 1), '/%d]' % FLAGS.epoch_size,
+                        print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
                               "| batch: [%d" % i, "of %d]" % total_batch,
                               "| cost =", "{:.9f}".format(c),
                               "| batch time: %03f" % batch_time,
-                              "| img/sec: %d" % int(batch_time * FLAGS.batch_size))
+                              "| img/sec: %d" % int(FLAGS.batch_size * batch_time),
+                              "| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
                         # Save model state
-                    if i % 100 == 1:
-                        saver.save(sess, os.path.join(os.curdir, FLAGS.check))
-                        print("Model Saved")
+                saver.save(sess, os.path.join(os.curdir, FLAGS.check))
+                print("Model Saved")
                 # Test model
                 correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
                 # Calculate accuracy
@@ -321,6 +314,7 @@ def main():
                     accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
             print("Optimization Finished!")
 
+    print("Total Time: ", time.time() - main_start_time)
 
 if __name__ == '__main__':
     main()
