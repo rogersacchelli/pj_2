@@ -28,12 +28,12 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('start_learning_rate', '0.1', 'Start Learning Rate')
+tf.app.flags.DEFINE_float('start_learning_rate', '0.5', 'Start Learning Rate')
 tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
 tf.app.flags.DEFINE_integer('epoch_size', '50', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop_all_exp_lr_decay_relu.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop_all_adagrad.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
@@ -312,6 +312,7 @@ def main():
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, labels))
         optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
             .minimize(cost, global_step=global_step)
+        optimizer = tf.train.AdagradOptimizer(tf.Variable(0.5)).minimize(cost)
 
         train_prediction = tf.nn.softmax(logits)
 
@@ -361,19 +362,19 @@ def main():
                               "| cost =", "{:.3f}".format(c),
                               "| accuracy =  %.03f" % accuracy(predictions, batch_y),
                               "| batch time: %.03f" % batch_time,
-                              "| img/sec: %d" % int(FLAGS.batch_size * batch_time),
+                              "| img/sec: %d" % int(FLAGS.batch_size / batch_time),
                               "| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
 
                         # Save model state
                 saver.save(sess, os.path.join(os.curdir, FLAGS.check))
                 print("Model Saved")
                 # Test model
-                correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
-                # Calculate accuracy
-                accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-                print(
-                    "Accuracy:",
-                    accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
+                # correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
+                # # Calculate accuracy
+                # accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+                # print(
+                #     "Accuracy:",
+                #     accuracy.eval({input: test_data['features'][:], labels: test_data['labels'][:]}))
             print("Optimization Finished!")
 
     print("Total Time: ", time.time() - main_start_time)
