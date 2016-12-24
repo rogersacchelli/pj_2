@@ -4,6 +4,7 @@ import os
 import numpy as np
 import random
 import time
+import cv2
 from matplotlib import pyplot as plt
 
 __autor__ = "Roger S. Sacchelli - roger.sacchelli@gmail.com"
@@ -30,7 +31,7 @@ tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 # CNN PARAMETERS
 tf.app.flags.DEFINE_float('start_learning_rate', '0.5', 'Start Learning Rate')
 tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
-tf.app.flags.DEFINE_integer('epoch_size', '50', 'Epoch Size')
+tf.app.flags.DEFINE_integer('epoch_size', '100', 'Epoch Size')
 
 # FILE HANDLING FLAGS
 tf.app.flags.DEFINE_string('check', 'checkpoint/cnn_3_tanh_1_fc_drop_all_adagrad.ckpt', 'File name for model saving')
@@ -54,7 +55,7 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
                 test=os.path.join(FLAGS.dataset_dir, FLAGS.test)):
     # Unpickling data and load it on memory
     # Pickle file is structered as follows:
-    # train = {'coords':[ndarray], '                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            features':[ndarray], 'labels':[ndarray], 'sizes':[ndarray]}
+    # train = {'coords':[ndarray], 'features':[ndarray], 'labels':[ndarray], 'sizes':[ndarray]}
     # test = {'coords':[ndarray], 'features':[ndarray], 'labels':[ndarray], 'sizes':[ndarray]}
 
     with open(train, mode='rb') as f:
@@ -74,8 +75,10 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     print("Number of classes =", n_classes)
 
     # Print number of examples per class
+    samples_per_class = []
     for i in range(n_classes):
-        print("\t Class %d:" % i, np.sum(train_dict['labels'][:] == i))
+        samples_per_class.append(np.sum(train_dict['labels'][:] == i))
+        print("\t Class %d:" % samples_per_class[-1], )
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
@@ -83,37 +86,79 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
           ((img_dim[0] * img_dim[1] * img_dim[2]) / 1024e2) * n_train * 4, 'MB')
 
     # Multiplot All Classes
-    # plt.imshow(train_dict['features'][0])
-
-    # plt.show()
+    #plt.figure(figsize=(14, 10))
+    #for i in range(n_classes):
+    #    plt.subplot(5, 10, i + 1)
+    #    plt.title('Class %d' % i)
+    #    plt.imshow(train_dict['features'][sum(samples_per_class[0:i])])
+    #plt.show()
 
     return train_dict, test_dict
 
 
-def add_distortion(dataset):
-    # ADD DISTORTION RANDOMLY ADDS A SET OF IMAGE
+def data_augmentation(dataset):
+    # DATA AUGMENTATION RANDOMLY ADDS A SET OF IMAGE
     # TRANSFORMATION TO INCREASE THE NUMBER OF EXAMPLES PER CLASS
     # PROVIDING A IMPROVED DISTRIBUTION OF IMAGES PER CLASS
 
     def _random_crop(image):
         pass
 
+
     def _random_brightness(image):
+        image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        image_hsv[:, :, :] +=
         pass
+
 
     def _flip_90_degrees_right(image):
-        pass
+        return np.rot90(image, 3)
+
 
     def _flip_90_degrees_left(image):
-        pass
+        return np.rot90(image, 1)
+
 
     def _flip_180_degrees(image):
-        pass
-
-    def _random_blur(image):
-        pass
+        return np.rot90(image, 2)
 
 
+    def _median_blur(image):
+        return cv2.medianBlur(image, 3)
+
+
+    def _blur(image):
+        return cv2.blur(image, (3, 3))
+
+
+    def _image_norm(image):
+        return (np.subtract((image), 127.) / (max(np.std((image)),
+              1. / (FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
+
+
+    def _clahe(image):
+        # CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        # Method by Prateek Joshi - https://www.packtpub.com/mapt/book/Application-Development/9781785283932
+        img_yuv = cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
+
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        cl1 = clahe.apply(img_yuv)
+
+        # convert the YUV image back to RGB format
+        return cv2.cvtColor(cl1, cv2.COLOR_YUV2BGR)
+
+    def _histeq(image):
+
+        # Method by Prateek Joshi - https://www.packtpub.com/mapt/book/Application-Development/9781785283932
+        img_yuv = cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
+
+        # equalize the histogram of the Y channel
+        img_yuv[:, :, 0] = cv2.equalizeHist(img_yuv[:, :, 0])
+
+        # convert the YUV image back to RGB format
+        img_output = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
+
+        return img_output
 
     samples_per_class = []
     for i in range((np.max(dataset['labels'][:]) + 1)):
@@ -133,7 +178,29 @@ def add_distortion(dataset):
         else:
             samples_to_add_per_class.append(0)
 
+    # ADDING DATA
+    for i in samples_per_class:
+        while i:
+            if i % 7 == 0:
+                new_feature = _image_norm(dataset['features'][i])
+            elif i % 5 == 0:
+                new_feature = _histeq(dataset['features'][i])
+            elif i % 3 == 0:
+                new_feature = _blur(dataset['features'][i])
+            elif i % 2 == 0:
+                new_feature = _clahe(dataset['features'][i])
 
+
+
+    for i in range(len(dataset['features'][:])):
+        new_feature = _blur(dataset['features'][i])
+        plt.figure()
+        plt.subplot(2, 1, 1)
+        plt.imshow(dataset['features'][i])
+        plt.subplot(2, 1, 2)
+        plt.imshow(new_feature)
+        plt.show()
+        break
 
 
 
@@ -173,9 +240,14 @@ def sparse_to_dense(dataset):
 def shuffle_dataset(dataset):
     # SHUFFLE TRAIN DATA SET TO IMPROVE ACCURACY
 
+    # SET OF FEATURES TO TEST RANDOM
+
+    set_b4 = np.sum(dataset['labels'][:])
+    print(set_b4)
+
     for i in range(len(dataset['features'])):
         # RANDOM INTEGER
-        rand_int = random.randint(0, len(dataset['features']) - 1)
+        rand_int = random.randint(0, len(dataset['features'])-1)
 
         # RANDOM POSITION FROM DATASET
         temp = [dataset['coords'][rand_int], dataset['features'][rand_int],
@@ -192,6 +264,29 @@ def shuffle_dataset(dataset):
         dataset['features'][i] = temp[1]
         dataset['labels'][i] = temp[2]
         dataset['sizes'][i] = temp[3]
+
+    # CHECK RANDOM
+
+    set_after = np.sum(dataset['labels'][:])
+    print(set_after)
+
+    if set_b4 == set_after:
+        print("RANDOM DATASET WORKS!")
+    else:
+        print("IMPROVE RANDOM FUNCTION!!")
+    #
+    # # Multiplot All randomized Classes
+    # randomized_classes_dict = {}
+    # for i in range(len(dataset['labels'][:])):
+    #     temp = randomized_classes_dict[i]
+    #     temp.update({i: })
+    #
+    # plt.figure(figsize=(14, 10))
+    # for i in range(FLAGS.NUM_OF_CLASSES):
+    #    plt.subplot(5, 10, i + 1)
+    #    plt.title('Class %d' % i)
+    #    plt.imshow(dataset['features'][sum(samples_per_class[0:i])])
+    # plt.show()
 
     return dataset
 
@@ -258,8 +353,13 @@ def main():
     # UNPICKLING DATA FROM FILES
     train_data, test_data = read_pickle()
 
+    # SHUFFLING TRAINING DATA SET TO IMPROVE ACCURACY
+    train_data = shuffle_dataset(train_data)
+    test_data = shuffle_dataset(test_data)
+
+    # ### START PRE-PROCESSING ###
     # ADD DISTORTION AND GENERATE MORE SAMPLES
-    # train_data = add_distortion(train_data)
+    train_data = data_augmentation(train_data)
 
     # NORMALIZING DATA TO IMPROVE SGD CONVERGENCE
     train_data, test_data = normalize_images(train_data, test_data)
@@ -268,9 +368,7 @@ def main():
     train_data = sparse_to_dense(train_data)
     test_data = sparse_to_dense(test_data)
 
-    # SHUFFLING TRAINING DATA SET TO IMPROVE ACCURACY
-    train_data = shuffle_dataset(train_data)
-    test_data = shuffle_dataset(test_data)
+
 
     graph = tf.Graph()
 
@@ -300,18 +398,18 @@ def main():
 
         logits = cnn(input, weights, biases)
 
-        decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
-        global_step = tf.Variable(0, trainable=False)
+        # decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
+        # global_step = tf.Variable(0, trainable=False)
 
-        leaning_rate = tf.train.exponential_decay(FLAGS.start_learning_rate,
-                                                  global_step=global_step,
-                                                  decay_steps=decay_steps,
-                                                  decay_rate=1e-3,
-                                                  staircase=False)
+        # leaning_rate = tf.train.exponential_decay(FLAGS.start_learning_rate,
+        #                                           global_step=global_step,
+        #                                           decay_steps=decay_steps,
+        #                                           decay_rate=1e-3,
+        #                                           staircase=False)
 
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, labels))
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
-            .minimize(cost, global_step=global_step)
+        # optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
+        #     .minimize(cost, global_step=global_step)
         optimizer = tf.train.AdagradOptimizer(tf.Variable(0.5)).minimize(cost)
 
         train_prediction = tf.nn.softmax(logits)
@@ -321,23 +419,29 @@ def main():
         saver = tf.train.Saver()
 
         # Initializing the variables
-        init = tf.initialize_all_variables()
+        # Handle exception in case of tensorflow different versions
+        try:
+            # 0.12 Method
+            init = tf.global_variables_initializer()
+        except:
+            # 0.11 Method
+            init = tf.initialize_all_variables()
 
     # Launch the graph
         with tf.Session() as sess:
             sess.run(init)
 
-            def accuracy(predictions, labels):
+            def _accuracy(predictions, labels):
                 return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
                         / predictions.shape[0])
 
             # Check for saved models
-            if os.path.exists(os.path.join(os.curdir, FLAGS.check)):
-                saver.restore(sess, os.path.join(os.curdir, FLAGS.check))
-                print("Model Loaded")
+            if os.path.exists(os.path.join(os.getcwd(), FLAGS.check + '.index')):
+                saver.restore(sess, os.path.join(os.getcwd(), FLAGS.check))
+                print("Model Loaded", FLAGS.check)
             else:
                 # If file does not exist, create dir not returning exception if dir exists
-                os.makedirs(os.path.join(os.path.curdir, 'checkpoint'), exist_ok=True)
+                os.makedirs(os.path.join(os.getcwd(), 'checkpoint'), exist_ok=True)
 
             # Training cycle
 
@@ -355,19 +459,20 @@ def main():
                     sess.run(optimizer, feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
                     if i % 50 == 1:
                         # Display logs per epoch step
-                        _, c, predictions = sess.run([optimizer, cost, train_prediction], feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
+                        _, c, predictions = sess.run([optimizer, cost, train_prediction],
+                                                     feed_dict={input: batch_x, labels: batch_y, keep_prob: 0.7})
                         batch_time = time.time() - start_time
                         print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
                               "| batch: [%d" % i, "of %d]" % total_batch,
                               "| cost =", "{:.3f}".format(c),
-                              "| accuracy =  %.03f" % accuracy(predictions, batch_y),
+                              "| accuracy =  %.03f" % _accuracy(predictions, batch_y),
                               "| batch time: %.03f" % batch_time,
-                              "| img/sec: %d" % int(FLAGS.batch_size / batch_time),
-                              "| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
+                              "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
+                              #"| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
 
                         # Save model state
-                saver.save(sess, os.path.join(os.curdir, FLAGS.check))
-                print("Model Saved")
+                saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
+                print("Model Saved", FLAGS.check)
                 # Test model
                 # correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
                 # # Calculate accuracy
