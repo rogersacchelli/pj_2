@@ -6,7 +6,11 @@ import random
 import time
 import cv2
 
-from sklearn.model_selection import train_test_split
+try:
+    from sklearn.model_selection import train_test_split
+except:
+    from sklearn.cross_validation import train_test_split
+
 from matplotlib import pyplot as plt
 
 __autor__ = "Roger S. Sacchelli - roger.sacchelli@gmail.com"
@@ -44,10 +48,11 @@ tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
 
 
 layer_width = {
-    'layer_1': 6,
-    'layer_2': 16,
-    'fully_connected_1': 120,
-    'fully_connected_2': 84
+    'layer_1': 100,
+    'layer_2': 150,
+    'layer_3': 250,
+    'fully_connected_1': 300,
+    'fully_connected_2': 150
 }
 
 # Store layers weight & bias
@@ -314,7 +319,7 @@ def shuffle_dataset(dataset):
 
 
 def conv_2d(x, W, b, strides=1):
-    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='VALID')
+    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
     x = tf.nn.bias_add(x, b)
     #return tf.nn.tanh(x)
     return tf.nn.relu(x)
@@ -334,22 +339,26 @@ def cnn(x, w, b, s=1, dropout=0.5):
 
     """:param: input, weights, biases and strides"""
 
-    # layer 1 - 32x32x3 to 28x28x6
+    # layer 1 - 32x32x3 to 32x32x100
     conv1 = conv_2d(x, w['layer_1'], b['layer_1'], s)
-    # Max Pooling -> 14x14x6
+    # Max Pooling -> 16x16x100
     conv1 = maxpool_2d(conv1)
 
-    # layer 2 - 14x14x6 -> 10x10x16
+    # layer 2 - 16x16x100 -> 16x16x150
     conv2 = conv_2d(conv1, w['layer_2'], b['layer_2'], s)
-    # Max Pooling -> 5x5->16
+    # Max Pooling -> 8x8x150
     conv2 = maxpool_2d(conv2)
 
+    # layer 3 - 8x8x150 -> 8x8x250
+    conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
+    # Max Pooling -> 4x4x250
+    conv3 = maxpool_2d(conv3)
 
-    # Fully connected layer 1 - 5*5*16 to 400
+    # Fully connected layer 1 - 4*4*250 to 4000
     fc1 = tf.reshape(
-        conv2,
+        conv3,
         [-1, w['fully_connected_1'].get_shape().as_list()[0]])
-    # FC 1 400 -> 120
+    # FC 1 4000 -> 120
     fc1 = tf.add(
         tf.matmul(fc1, w['fully_connected_1']),
         b['fully_connected_1'])
@@ -375,13 +384,13 @@ def main():
     main_start_time = time.time()
 
     # READ FILES
-    if os.path.exists('./augmented_train.p'):
+    if not os.path.exists('./augmented_train.p'):
         # UNPICKLING DATA FROM FILES
         train_data, test_data = read_pickle()
 
         # ### DATA AUGMENTATION ###
         # ADD DISTORTION AND GENERATE MORE SAMPLES
-        # train_data = data_augmentation(train_data)
+        train_data = data_augmentation(train_data)
     else:
         with open('augmented_train.p', mode='rb') as f:
             train_data = pickle.load(f)
@@ -404,132 +413,135 @@ def main():
     X_train, X_valid, y_train, y_valid = train_test_split(train_data['features'],
                                                           train_data['labels'], test_size=0.3)
 
-    graph = tf.Graph()
+    #graph = tf.Graph()
 
-    with graph.as_default():
-        x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
-        y = tf.placeholder(tf.int32, None)
-        one_hot_y = tf.one_hot(y, FLAGS.NUM_OF_CLASSES)
+    #with graph.as_default():
+    x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
+    y = tf.placeholder(tf.int32, None)
+    one_hot_y = tf.one_hot(y, FLAGS.NUM_OF_CLASSES)
 
-        weights = {
-            'layer_1': tf.Variable(tf.truncated_normal(
-                [5, 5, 3, layer_width['layer_1']], stddev=0.1)),
-            'layer_2': tf.Variable(tf.truncated_normal(
-                [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
-            'fully_connected_1': tf.Variable(tf.truncated_normal(
-                [400, layer_width['fully_connected_1']])),
-            'fully_connected_2': tf.Variable(tf.truncated_normal(
-                [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
-            'out': tf.Variable(tf.truncated_normal(
-                [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
-        }
-        biases = {
-            'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
-            'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
-            'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
-            'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
-            'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
-        }
+    weights = {
+        'layer_1': tf.Variable(tf.truncated_normal(
+            [5, 5, 3, layer_width['layer_1']], stddev=0.1)),
+        'layer_2': tf.Variable(tf.truncated_normal(
+            [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
+        'layer_3': tf.Variable(tf.truncated_normal(
+            [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.1)),
+        'fully_connected_1': tf.Variable(tf.truncated_normal(
+            [4000, layer_width['fully_connected_1']])),
+        'fully_connected_2': tf.Variable(tf.truncated_normal(
+            [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
+        'out': tf.Variable(tf.truncated_normal(
+            [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
+    }
+    biases = {
+        'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
+        'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
+        'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
+        'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
+        'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
+        'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
+    }
 
-        logits = cnn(x, weights, biases)
+    logits = cnn(x, weights, biases)
 
-        # decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
-        # global_step = tf.Variable(0, trainable=False)
+    # decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
+    # global_step = tf.Variable(0, trainable=False)
 
-        # leaning_rate = tf.train.exponential_decay(FLAGS.start_learning_rate,
-        #                                           global_step=global_step,
-        #                                           decay_steps=decay_steps,
-        #                                           decay_rate=1e-3,
-        #                                           staircase=False)
+    # leaning_rate = tf.train.exponential_decay(FLAGS.start_learning_rate,
+    #                                           global_step=global_step,
+    #                                           decay_steps=decay_steps,
+    #                                           decay_rate=1e-3,
+    #                                           staircase=False)
 
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
-        # optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
-        #     .minimize(cost, global_step=global_step)
-        optimizer = tf.train.AdagradOptimizer(learning_rate=0.1).minimize(cost)
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
+    # optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
+    #     .minimize(cost, global_step=global_step)
+    optimizer = tf.train.AdagradOptimizer(learning_rate=0.001).minimize(cost)
 
-        train_prediction = tf.nn.softmax(logits)
+    train_prediction = tf.nn.softmax(logits)
 
-        # Create saving object
+    # Create saving object
 
-        saver = tf.train.Saver()
+    saver = tf.train.Saver()
 
-        # Initializing the variables
-        # Handle exception in case of tensorflow different versions
-        try:
-            # 0.12 Method
-            init = tf.global_variables_initializer()
-        except:
-            # 0.11 Method
-            init = tf.initialize_all_variables()
+    # Initializing the variables
+    # Handle exception in case of tensorflow different versions
+    try:
+        # 0.12 Method
+        init = tf.global_variables_initializer()
+    except:
+        # 0.11 Method
+        init = tf.initialize_all_variables()
 
-    # Launch the graph
-        with tf.Session() as sess:
-            sess.run(init)
+# Launch the graph
+    with tf.Session() as sess:
+        sess.run(init)
 
-            def _accuracy(predictions, labels):
-                return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
-                        / predictions.shape[0])
+        def _accuracy(predictions, labels):
+            return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
+                    / predictions.shape[0])
 
-            def _evaluate(X_data, y_data):
+        def _evaluate(X_data, y_data):
 
-                correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
-                accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-                num_examples = len(X_data)
+            correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
+            accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+            num_examples = len(X_data)
 
-                total_accuracy = 0
-                session = tf.get_default_session()
-                for offset in range(0, num_examples, FLAGS.batch_size):
-                    bat_x, bat_y = X_data[offset:offset + FLAGS.batch_size], \
-                                       y_data[offset:offset + FLAGS.batch_size]
-                    accuracy = session.run(accuracy_operation, feed_dict={x: bat_x, y: bat_y})
-                    total_accuracy += (accuracy * len(bat_x))
-                return total_accuracy / num_examples
+            total_accuracy = 0
+            session = tf.get_default_session()
+            for offset in range(0, num_examples, FLAGS.batch_size):
+                bat_x, bat_y = X_data[offset:offset + FLAGS.batch_size], \
+                                   y_data[offset:offset + FLAGS.batch_size]
+                accuracy = session.run(accuracy_operation, feed_dict={x: bat_x, y: bat_y})
+                total_accuracy += (accuracy             * len(bat_x))
+            return total_accuracy / num_examples
 
-            # Check for saved models
-            if os.path.exists(os.path.join(os.getcwd(), FLAGS.check)):
-                saver.restore(sess, os.path.join(os.getcwd(), FLAGS.check))
-                print("Model Loaded", FLAGS.check)
-            else:
-                # If file does not exist, create dir not returning exception if dir exists
-                os.makedirs(os.path.join(os.getcwd(), 'checkpoint'), exist_ok=True)
+        # Check for saved models
+        if os.path.exists(os.path.join(os.getcwd(), FLAGS.check)):
+            saver.restore(sess, os.path.join(os.getcwd(), FLAGS.check))
+            print("Model Loaded", FLAGS.check)
+        else:
+            # If file does not exist, create dir not returning exception if dir exists
+            os.makedirs(os.path.join(os.getcwd(), 'checkpoint'), exist_ok=True)
 
-            # Training cycle
+        # Training cycle
 
-            for epoch in range(FLAGS.epoch_size):
+        for epoch in range(FLAGS.epoch_size):
 
-                total_batch = int(len(X_train) / FLAGS.batch_size)
+            total_batch = int(len(X_train) / FLAGS.batch_size)
 
-                # Loop over all batches
-                for i in range(total_batch):
+            # Loop over all batches
+            for i in range(total_batch):
 
-                    start_time = time.time()
-                    start_batch_idx = i * FLAGS.batch_size
-                    end_batch_idx = start_batch_idx + FLAGS.batch_size
-                    batch_x = X_train[start_batch_idx: end_batch_idx]
-                    batch_y = y_train[start_batch_idx: end_batch_idx]
-                    keep_prob = tf.placeholder(tf.float32)
+                start_time = time.time()
+                start_batch_idx = i * FLAGS.batch_size
+                end_batch_idx = start_batch_idx + FLAGS.batch_size
+                batch_x = X_train[start_batch_idx: end_batch_idx]
+                batch_y = y_train[start_batch_idx: end_batch_idx]
+                keep_prob = tf.placeholder(tf.float32)
 
-                    # Run optimization op (backprop) and cost op (to get loss value)
-                    sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.7})
+                # Run optimization op (backprop) and cost op (to get loss value)
+                sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
 
-                    if i % 50 == 1:
-                        # Display logs per epoch step
-                        _, c = sess.run([optimizer, cost],
-                                        feed_dict={x: batch_x, y: batch_y, keep_prob: 0.7})
-                        batch_time = time.time() - start_time
-                        print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
-                              "| batch: [%d" % i, "of %d]" % total_batch,
-                              "| cost =", "{:.3f}".format(c),
-                              "| batch time: %.03f" % batch_time,
-                              "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
-                              #"| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
+                if i % 50 == 1:
+                    # Display logs per epoch step
+                    _, c = sess.run([optimizer, cost],
+                                    feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
+                    batch_time = time.time() - start_time
+                    print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
+                          "| batch: [%d" % i, "of %d]" % total_batch,
+                          "| cost =", "{:.3f}".format(c),
+                          "| batch time: %.03f" % batch_time,
+                          "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
+                          #"| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
 
-                # Save model state after each epoch
-                saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
-                print("Model Saved", FLAGS.check)
-                print("Accuracy:", _evaluate(X_valid, y_valid))
+            # Save model state after each epoch
+            saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
+            print("Model Saved", FLAGS.check)
+            print("Accuracy:", _evaluate(X_valid, y_valid))
 
-            print("Optimization Finished!")
+        print("Optimization Finished!")
 
     print("Total Time: ", time.time() - main_start_time)
 
