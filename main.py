@@ -5,6 +5,7 @@ import numpy as np
 import random
 import time
 import cv2
+from sklearn.utils import shuffle
 
 try:
     from sklearn.model_selection import train_test_split
@@ -48,11 +49,11 @@ tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
 
 
 layer_width = {
-    'layer_1': 100,
-    'layer_2': 150,
-    'layer_3': 250,
-    'fully_connected_1': 300,
-    'fully_connected_2': 150
+    'layer_1': 6,
+    'layer_2': 16,
+    'layer_3': 36,
+    'fully_connected_1': 120,
+    'fully_connected_2': 84
 }
 
 # Store layers weight & bias
@@ -85,7 +86,7 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     samples_per_class = []
     for i in range(n_classes):
         samples_per_class.append(np.sum(train_dict['labels'][:] == i))
-        print("\t Class %d:" % samples_per_class[-1], )
+        print("\t Class ", i, "%d:" % samples_per_class[-1], )
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
@@ -275,12 +276,8 @@ def shuffle_dataset(dataset):
 
     # SET OF FEATURES TO TEST RANDOM
 
-    set_b4 = np.sum(dataset['features'][:])
-    np.random.seed(0)
-    np.random.shuffle(dataset['features'])
-    np.random.shuffle(dataset['labels'])
-    np.random.shuffle(dataset['coords'])
-    np.random.shuffle(dataset['sizes'])
+    dataset['features'], dataset['labels'], dataset['coords'], dataset['sizes'] = \
+        shuffle(dataset['features'], dataset['labels'], dataset['coords'], dataset['sizes'])
 
     # for i in range(len(dataset['features'])):
     #     # RANDOM INTEGER
@@ -308,12 +305,13 @@ def shuffle_dataset(dataset):
     #     temp = randomized_classes_dict[i]
     #     temp.update({i: })
     #
-    # plt.figure(figsize=(14, 10))
-    # for i in range(FLAGS.NUM_OF_CLASSES):
-    #    plt.subplot(5, 10, i + 1)
-    #    plt.title('Class %d' % i)
-    #    plt.imshow(dataset['features'][sum(samples_per_class[0:i])])
-    # plt.show()
+    plt.figure(figsize=(14, 10))
+    for i in range(FLAGS.NUM_OF_CLASSES):
+        array_class = np.where(dataset['labels'] == i)
+        plt.subplot(5, 10, i + 1)
+        plt.title('Class %d' % i)
+        plt.imshow(dataset['features'][array_class[0][0]])
+    plt.show()
 
     return dataset
 
@@ -339,22 +337,22 @@ def cnn(x, w, b, s=1, dropout=0.5):
 
     """:param: input, weights, biases and strides"""
 
-    # layer 1 - 32x32x3 to 32x32x100
+    # layer 1 - 32x32x3 to 32x32x6
     conv1 = conv_2d(x, w['layer_1'], b['layer_1'], s)
-    # Max Pooling -> 16x16x100
+    # Max Pooling -> 16x16x6
     conv1 = maxpool_2d(conv1)
 
-    # layer 2 - 16x16x100 -> 16x16x150
+    # layer 2 - 16x16x6 -> 16x16x16
     conv2 = conv_2d(conv1, w['layer_2'], b['layer_2'], s)
-    # Max Pooling -> 8x8x150
+    # Max Pooling -> 8x8x16
     conv2 = maxpool_2d(conv2)
 
-    # layer 3 - 8x8x150 -> 8x8x250
+    # layer 3 - 8x8x16 -> 8x8x36
     conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
-    # Max Pooling -> 4x4x250
+    # Max Pooling -> 4x4x46
     conv3 = maxpool_2d(conv3)
 
-    # Fully connected layer 1 - 4*4*250 to 4000
+    # Fully connected layer 1 - 4*4*36 to 576
     fc1 = tf.reshape(
         conv3,
         [-1, w['fully_connected_1'].get_shape().as_list()[0]])
@@ -393,6 +391,7 @@ def main():
         train_data = data_augmentation(train_data)
     else:
         with open('augmented_train.p', mode='rb') as f:
+            print("LOADING AUGMENTED TRAINING SET")
             train_data = pickle.load(f)
             _, test_data = read_pickle()
             f.close()
@@ -422,13 +421,13 @@ def main():
 
     weights = {
         'layer_1': tf.Variable(tf.truncated_normal(
-            [5, 5, 3, layer_width['layer_1']], stddev=0.1)),
+            [5, 5, 3, layer_width['layer_1']], stddev=0.01)),
         'layer_2': tf.Variable(tf.truncated_normal(
-            [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.1)),
+            [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.01)),
         'layer_3': tf.Variable(tf.truncated_normal(
-            [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.1)),
+            [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.01)),
         'fully_connected_1': tf.Variable(tf.truncated_normal(
-            [4000, layer_width['fully_connected_1']])),
+            [576, layer_width['fully_connected_1']])),
         'fully_connected_2': tf.Variable(tf.truncated_normal(
             [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
         'out': tf.Variable(tf.truncated_normal(
@@ -457,9 +456,9 @@ def main():
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
     # optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
     #     .minimize(cost, global_step=global_step)
-    optimizer = tf.train.AdagradOptimizer(learning_rate=0.001).minimize(cost)
+    optimizer = tf.train.AdagradOptimizer(learning_rate=0.01).minimize(cost)
 
-    train_prediction = tf.nn.softmax(logits)
+    # train_prediction = tf.nn.softmax(logits)
 
     # Create saving object
 
@@ -494,7 +493,7 @@ def main():
                 bat_x, bat_y = X_data[offset:offset + FLAGS.batch_size], \
                                    y_data[offset:offset + FLAGS.batch_size]
                 accuracy = session.run(accuracy_operation, feed_dict={x: bat_x, y: bat_y})
-                total_accuracy += (accuracy             * len(bat_x))
+                total_accuracy += (accuracy * len(bat_x))
             return total_accuracy / num_examples
 
         # Check for saved models
