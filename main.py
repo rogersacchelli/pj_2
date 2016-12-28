@@ -445,6 +445,7 @@ def main():
 
     logits = cnn(x, weights, biases)
 
+
     # decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
     # global_step = tf.Variable(0, trainable=False)
 
