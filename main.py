@@ -36,12 +36,12 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('start_learning_rate', '0.5', 'Start Learning Rate')
-tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
+tf.app.flags.DEFINE_float('start_learning_rate', '0.01', 'Start Learning Rate')
+tf.app.flags.DEFINE_integer('batch_size', '64', 'Batch Size')
 tf.app.flags.DEFINE_integer('epoch_size', '100', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs_2.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
@@ -86,7 +86,7 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     samples_per_class = []
     for i in range(n_classes):
         samples_per_class.append(np.sum(train_dict['labels'][:] == i))
-        print("\t Class ", i, "%d:" % samples_per_class[-1], )
+        print("\t Class ", i, ": %d" % samples_per_class[-1], )
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
@@ -108,15 +108,6 @@ def data_augmentation(dataset):
     # DATA AUGMENTATION RANDOMLY ADDS A SET OF IMAGE
     # TRANSFORMATION TO INCREASE THE NUMBER OF EXAMPLES PER CLASS
     # PROVIDING A IMPROVED DISTRIBUTION OF IMAGES PER CLASS
-
-    def _random_crop(image):
-        pass
-
-
-    def _random_brightness(image):
-        # image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        # image_hsv[:, :, :] +=
-        pass
 
     def _flip_random_90_degrees(image, flip):
         # RANDOM FLIP
@@ -222,7 +213,7 @@ def data_augmentation(dataset):
     samples_per_class = []
     for i in range(n_classes):
         samples_per_class.append(np.sum(dataset['labels'][:] == i))
-        print("\t Class %d:" % samples_per_class[-1], )
+        print("\t Class ", i, ": %d" % samples_per_class[-1], )
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
@@ -237,22 +228,6 @@ def data_augmentation(dataset):
 
 def normalize_images(dataset):
     # THIS FUNCTION NORMALIZES IMAGES, COMPUTING:
-    # (X - MEAN)/ADJUSTED_STD_DEV WHERE ADJUSTED_STD_DEV = max(ADJUSTED_STD_DEV, 1.0/sqrt(image.NumElements()))
-
-    # DATA TYPE CONVERSION
-    # train['features'] = train['features'].astype(np.float)
-    # test['features'] = test['features'].astype(np.float)
-    #
-    # # NORMALIZATION
-    # for i in range(len(train['features'][:])):
-    #     train['features'][i] = (np.subtract((train['features'][i]), 127.) /
-    #                             (max(np.std((train['features'][i])),
-    #                                  1. / (FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
-    #
-    # for i in range(len(test['features'][:])):
-    #     test['features'][i] = (np.subtract((test['features'][i]), 127.) /
-    #                             (max(np.std((test['features'][i])),
-    #                                  1. / (FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
 
     dataset['features'] = dataset['features'].astype(dtype='float64')
     dataset['features'] -= np.mean(dataset['features'], axis=0)
@@ -279,32 +254,6 @@ def shuffle_dataset(dataset):
     dataset['features'], dataset['labels'], dataset['coords'], dataset['sizes'] = \
         shuffle(dataset['features'], dataset['labels'], dataset['coords'], dataset['sizes'])
 
-    # for i in range(len(dataset['features'])):
-    #     # RANDOM INTEGER
-    #     rand_int = random.randint(0, len(dataset['features'])-1)
-    #
-    #     # RANDOM POSITION FROM DATASET
-    #     temp = [dataset['coords'][rand_int], dataset['features'][rand_int],
-    #             dataset['labels'][rand_int], dataset['sizes'][rand_int]]
-    #
-    #     # ASSIGN RANDOM POSITION TO CURRENT POSITION
-    #     dataset['coords'][rand_int] = dataset['coords'][i]
-    #     dataset['features'][rand_int] = dataset['features'][i]
-    #     dataset['labels'][rand_int] = dataset['labels'][i]
-    #     dataset['sizes'][rand_int] = dataset['sizes'][i]
-    #
-    #     # REPLACE CURRENT POSITION FROM RANDOM POSITION
-    #     dataset['coords'][i] = temp[0]
-    #     dataset['features'][i] = temp[1]
-    #     dataset['labels'][i] = temp[2]
-    #     dataset['sizes'][i] = temp[3]
-
-    # # Multiplot All randomized Classes
-    # randomized_classes_dict = {}
-    # for i in range(len(dataset['labels'][:])):
-    #     temp = randomized_classes_dict[i]
-    #     temp.update({i: })
-    #
     plt.figure(figsize=(14, 10))
     for i in range(FLAGS.NUM_OF_CLASSES):
         array_class = np.where(dataset['labels'] == i)
@@ -360,7 +309,7 @@ def cnn(x, w, b, s=1, dropout=0.5):
     fc1 = tf.add(
         tf.matmul(fc1, w['fully_connected_1']),
         b['fully_connected_1'])
-    fc1 = tf.nn.tanh(fc1)
+    fc1 = tf.nn.relu(fc1)
 
     # Dropout regularization for FC 1
     drop_fc1 = tf.nn.dropout(fc1, dropout)
@@ -369,11 +318,10 @@ def cnn(x, w, b, s=1, dropout=0.5):
     fc2 = tf.add(
         tf.matmul(drop_fc1, w['fully_connected_2']),
         b['fully_connected_2'])
-    fc2 = tf.nn.tanh(fc2)
-    drop_fc2 = tf.nn.dropout(fc2, dropout)
+    fc2 = tf.nn.relu(fc2)
 
     # Output Layer - class prediction - 512 to 43
-    out = tf.add(tf.matmul(drop_fc2, w['out']), b['out'])
+    out = tf.add(tf.matmul(fc2, w['out']), b['out'])
     return out
 
 
@@ -412,70 +360,54 @@ def main():
     X_train, X_valid, y_train, y_valid = train_test_split(train_data['features'],
                                                           train_data['labels'], test_size=0.3)
 
-    #graph = tf.Graph()
+    graph = tf.Graph()
 
-    #with graph.as_default():
-    x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
-    y = tf.placeholder(tf.int32, None)
-    one_hot_y = tf.one_hot(y, FLAGS.NUM_OF_CLASSES)
+    with graph.as_default():
+        x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
+        y = tf.placeholder(tf.int32, None)
+        one_hot_y = tf.one_hot(y, FLAGS.NUM_OF_CLASSES)
 
-    weights = {
-        'layer_1': tf.Variable(tf.truncated_normal(
-            [5, 5, 3, layer_width['layer_1']], stddev=0.01)),
-        'layer_2': tf.Variable(tf.truncated_normal(
-            [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.01)),
-        'layer_3': tf.Variable(tf.truncated_normal(
-            [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.01)),
-        'fully_connected_1': tf.Variable(tf.truncated_normal(
-            [576, layer_width['fully_connected_1']])),
-        'fully_connected_2': tf.Variable(tf.truncated_normal(
-            [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
-        'out': tf.Variable(tf.truncated_normal(
-            [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
-    }
-    biases = {
-        'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
-        'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
-        'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
-        'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
-        'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
-        'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
-    }
+        weights = {
+            'layer_1': tf.Variable(tf.truncated_normal(
+                [5, 5, 3, layer_width['layer_1']], stddev=0.01)),
+            'layer_2': tf.Variable(tf.truncated_normal(
+                [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.01)),
+            'layer_3': tf.Variable(tf.truncated_normal(
+                [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.01)),
+            'fully_connected_1': tf.Variable(tf.truncated_normal(
+                [576, layer_width['fully_connected_1']])),
+            'fully_connected_2': tf.Variable(tf.truncated_normal(
+                [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
+            'out': tf.Variable(tf.truncated_normal(
+                [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
+        }
+        biases = {
+            'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
+            'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
+            'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
+            'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
+            'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
+            'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
+        }
 
-    logits = cnn(x, weights, biases)
+        logits = cnn(x, weights, biases)
 
-    # decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
-    # global_step = tf.Variable(0, trainable=False)
+        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
+        optimizer = tf.train.AdagradOptimizer(learning_rate=FLAGS.start_learning_rate).minimize(cost)
 
-    # leaning_rate = tf.train.exponential_decay(FLAGS.start_learning_rate,
-    #                                           global_step=global_step,
-    #                                           decay_steps=decay_steps,
-    #                                           decay_rate=1e-3,
-    #                                           staircase=False)
+        # Create saving object
 
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
-    # optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
-    #     .minimize(cost, global_step=global_step)
-    optimizer = tf.train.AdagradOptimizer(learning_rate=0.01).minimize(cost)
+        saver = tf.train.Saver()
 
-    # train_prediction = tf.nn.softmax(logits)
+        # Initializing the variables
+        # Handle exception in case of tensorflow different versions
+        try:
+            # 0.12 Method
+            init = tf.global_variables_initializer()
+        except:
+            # 0.11 Method
+            init = tf.initialize_all_variables()
 
-    # Create saving object
-
-    saver = tf.train.Saver()
-
-    # Initializing the variables
-    # Handle exception in case of tensorflow different versions
-    try:
-        # 0.12 Method
-        init = tf.global_variables_initializer()
-    except:
-        # 0.11 Method
-        init = tf.initialize_all_variables()
-
-# Launch the graph
-    with tf.Session() as sess:
-        sess.run(init)
 
         def _accuracy(predictions, labels):
             return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
@@ -496,53 +428,59 @@ def main():
                 total_accuracy += (accuracy * len(bat_x))
             return total_accuracy / num_examples
 
-        # Check for saved models
-        if os.path.exists(os.path.join(os.getcwd(), FLAGS.check)):
-            saver.restore(sess, os.path.join(os.getcwd(), FLAGS.check))
-            print("Model Loaded", FLAGS.check)
-        else:
-            # If file does not exist, create dir not returning exception if dir exists
-            os.makedirs(os.path.join(os.getcwd(), 'checkpoint'), exist_ok=True)
-
-        # Training cycle
-
+        print("TRAINING")
         for epoch in range(FLAGS.epoch_size):
 
-            total_batch = int(len(X_train) / FLAGS.batch_size)
+        # Launch the graph
+            with tf.Session() as sess:
+                sess.run(init)
 
-            # Loop over all batches
-            for i in range(total_batch):
+                # Check for saved models
+                if os.path.exists(os.path.join(os.getcwd(), FLAGS.check)):
+                    saver.restore(sess, os.path.join(os.getcwd(), FLAGS.check))
+                    print("Model Loaded", FLAGS.check)
+                else:
+                    # If file does not exist, create dir not returning exception if dir exists
+                    os.makedirs(os.path.join(os.getcwd(), 'checkpoint'), exist_ok=True)
 
-                start_time = time.time()
-                start_batch_idx = i * FLAGS.batch_size
-                end_batch_idx = start_batch_idx + FLAGS.batch_size
-                batch_x = X_train[start_batch_idx: end_batch_idx]
-                batch_y = y_train[start_batch_idx: end_batch_idx]
-                keep_prob = tf.placeholder(tf.float32)
+                # Training cycle
+                
+                total_batch = int(len(X_train) / FLAGS.batch_size)
 
-                # Run optimization op (backprop) and cost op (to get loss value)
-                sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
+                # Loop over all batches
+                for i in range(total_batch):
 
-                if i % 50 == 1:
-                    # Display logs per epoch step
-                    _, c = sess.run([optimizer, cost],
-                                    feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
-                    batch_time = time.time() - start_time
-                    print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
-                          "| batch: [%d" % i, "of %d]" % total_batch,
-                          "| cost =", "{:.3f}".format(c),
-                          "| batch time: %.03f" % batch_time,
-                          "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
-                          #"| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
+                    start_time = time.time()
+                    start_batch_idx = i * FLAGS.batch_size
+                    end_batch_idx = start_batch_idx + FLAGS.batch_size
+                    batch_x = X_train[start_batch_idx: end_batch_idx]
+                    batch_y = y_train[start_batch_idx: end_batch_idx]
+                    keep_prob = tf.placeholder(tf.float32)
 
-            # Save model state after each epoch
-            saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
-            print("Model Saved", FLAGS.check)
-            print("Accuracy:", _evaluate(X_valid, y_valid))
+                    # Run optimization op (backprop) and cost op (to get loss value)
+                    sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
 
-        print("Optimization Finished!")
+                    if i % (total_batch / 2)  == 1 or i == total_batch:
 
-    print("Total Time: ", time.time() - main_start_time)
+                        # Display logs per epoch step
+                        _, c = sess.run([optimizer, cost],
+                                        feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
+                        batch_time = time.time() - start_time
+                        print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
+                              "| batch: [%d" % i, "of %d]" % total_batch,
+                              "| cost =", "{:.3f}".format(c),
+                              "| batch time: %.03f" % batch_time,
+                              "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
+
+                # Save model state after each epoch
+                saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
+                print("Model Saved", FLAGS.check)
+                print("Accuracy:", _evaluate(X_valid, y_valid))
+            sess.close()
+
+    print("Optimization Finished!")
+    total_time = time.time() - main_start_time
+    print("Total Time: ", (total_time) / 3600, " hours")
 
 if __name__ == '__main__':
     main()
