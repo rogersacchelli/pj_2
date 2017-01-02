@@ -36,12 +36,12 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('start_learning_rate', '0.01', 'Start Learning Rate')
-tf.app.flags.DEFINE_integer('batch_size', '64', 'Batch Size')
-tf.app.flags.DEFINE_integer('epoch_size', '100', 'Epoch Size')
+tf.app.flags.DEFINE_float('start_learning_rate', '0.1', 'Start Learning Rate')
+tf.app.flags.DEFINE_integer('batch_size', '256', 'Batch Size')
+tf.app.flags.DEFINE_integer('epoch_size', '300', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs_2.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs_adadelta_3.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
@@ -51,9 +51,8 @@ tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
 layer_width = {
     'layer_1': 6,
     'layer_2': 16,
-    'layer_3': 36,
-    'fully_connected_1': 120,
-    'fully_connected_2': 84
+    'fully_connected_1': 256,
+    'fully_connected_2': 120
 }
 
 # Store layers weight & bias
@@ -266,10 +265,10 @@ def shuffle_dataset(dataset):
 
 
 def conv_2d(x, W, b, strides=1):
-    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
+    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='VALID')
     x = tf.nn.bias_add(x, b)
-    #return tf.nn.tanh(x)
-    return tf.nn.relu(x)
+    return tf.nn.tanh(x)
+    #return tf.nn.relu(x)
 
 
 def maxpool_2d(x, k=2):
@@ -297,13 +296,13 @@ def cnn(x, w, b, s=1, dropout=0.5):
     conv2 = maxpool_2d(conv2)
 
     # layer 3 - 8x8x16 -> 8x8x36
-    conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
+    #conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
     # Max Pooling -> 4x4x46
-    conv3 = maxpool_2d(conv3)
+    #conv3 = maxpool_2d(conv3)
 
     # Fully connected layer 1 - 4*4*36 to 576
     fc1 = tf.reshape(
-        conv3,
+        conv2,
         [-1, w['fully_connected_1'].get_shape().as_list()[0]])
     # FC 1 4000 -> 120
     fc1 = tf.add(
@@ -360,123 +359,112 @@ def main():
     X_train, X_valid, y_train, y_valid = train_test_split(train_data['features'],
                                                           train_data['labels'], test_size=0.3)
 
-    graph = tf.Graph()
+    x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
+    y = tf.placeholder(tf.int32, None)
+    one_hot_y = tf.one_hot(y, FLAGS.NUM_OF_CLASSES)
 
-    with graph.as_default():
-        x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
-        y = tf.placeholder(tf.int32, None)
-        one_hot_y = tf.one_hot(y, FLAGS.NUM_OF_CLASSES)
+    weights = {
+        'layer_1': tf.Variable(tf.truncated_normal(
+            [5, 5, 3, layer_width['layer_1']], stddev=0.01)),
+        'layer_2': tf.Variable(tf.truncated_normal(
+            [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.01)),
+        #'layer_3': tf.Variable(tf.truncated_normal(
+        #    [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.01)),
+        'fully_connected_1': tf.Variable(tf.truncated_normal(
+            [400, layer_width['fully_connected_1']])),
+        'fully_connected_2': tf.Variable(tf.truncated_normal(
+            [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
+        'out': tf.Variable(tf.truncated_normal(
+            [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
+    }
+    biases = {
+        'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
+        'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
+        #'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
+        'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
+        'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
+        'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
+    }
 
-        weights = {
-            'layer_1': tf.Variable(tf.truncated_normal(
-                [5, 5, 3, layer_width['layer_1']], stddev=0.01)),
-            'layer_2': tf.Variable(tf.truncated_normal(
-                [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.01)),
-            'layer_3': tf.Variable(tf.truncated_normal(
-                [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.01)),
-            'fully_connected_1': tf.Variable(tf.truncated_normal(
-                [576, layer_width['fully_connected_1']])),
-            'fully_connected_2': tf.Variable(tf.truncated_normal(
-                [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
-            'out': tf.Variable(tf.truncated_normal(
-                [layer_width['fully_connected_2'], FLAGS.NUM_OF_CLASSES]))
-        }
-        biases = {
-            'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
-            'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
-            'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
-            'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
-            'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
-            'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
-        }
+    logits = cnn(x, weights, biases)
 
-        logits = cnn(x, weights, biases)
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
+    optimizer = tf.train.AdadeltaOptimizer(learning_rate=FLAGS.start_learning_rate).minimize(cost)
 
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
-        optimizer = tf.train.AdagradOptimizer(learning_rate=FLAGS.start_learning_rate).minimize(cost)
+    # Create saving object
 
-        # Create saving object
+    saver = tf.train.Saver()
 
-        saver = tf.train.Saver()
-
-        # Initializing the variables
-        # Handle exception in case of tensorflow different versions
-        try:
-            # 0.12 Method
-            init = tf.global_variables_initializer()
-        except:
-            # 0.11 Method
-            init = tf.initialize_all_variables()
+    # Initializing the variables
+    # Handle exception in case of tensorflow different versions
+    try:
+        # 0.12 Method
+        init = tf.global_variables_initializer()
+    except:
+        # 0.11 Method
+        init = tf.initialize_all_variables()
 
 
-        def _accuracy(predictions, labels):
-            return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
-                    / predictions.shape[0])
+    def _accuracy(predictions, labels):
+        return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
+                / predictions.shape[0])
 
-        def _evaluate(X_data, y_data):
+    def _evaluate(X_data, y_data):
 
-            correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
-            accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            num_examples = len(X_data)
+        correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
+        accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        num_examples = len(X_data)
 
-            total_accuracy = 0
-            session = tf.get_default_session()
-            for offset in range(0, num_examples, FLAGS.batch_size):
-                bat_x, bat_y = X_data[offset:offset + FLAGS.batch_size], \
-                                   y_data[offset:offset + FLAGS.batch_size]
-                accuracy = session.run(accuracy_operation, feed_dict={x: bat_x, y: bat_y})
-                total_accuracy += (accuracy * len(bat_x))
-            return total_accuracy / num_examples
+        total_accuracy = 0
+        session = tf.get_default_session()
+        for offset in range(0, num_examples, FLAGS.batch_size):
+            bat_x, bat_y = X_data[offset:offset + FLAGS.batch_size], \
+                               y_data[offset:offset + FLAGS.batch_size]
+            accuracy = session.run(accuracy_operation, feed_dict={x: bat_x, y: bat_y})
+            total_accuracy += (accuracy * len(bat_x))
+        return total_accuracy / num_examples
 
-        print("TRAINING")
+    with tf.Session() as sess:
+        sess.run(init)
+
+        total_batch = int(len(X_train) / FLAGS.batch_size)
+        keep_prob = tf.placeholder(tf.float32)
+
+        if os.path.exists(os.path.join(os.curdir, FLAGS.check)):
+            saver.restore(sess, os.path.join(os.curdir, FLAGS.check))
+            print("Model Loaded")
+        else:
+            # If file does not exist, create dir not returning exception if dir exists
+            os.makedirs(os.path.join(os.path.curdir, 'checkpoint'), exist_ok=True)
+
         for epoch in range(FLAGS.epoch_size):
 
-        # Launch the graph
-            with tf.Session() as sess:
-                sess.run(init)
+            # Loop over all batches
+            for i in range(total_batch):
 
-                # Check for saved models
-                if os.path.exists(os.path.join(os.getcwd(), FLAGS.check)):
-                    saver.restore(sess, os.path.join(os.getcwd(), FLAGS.check))
-                    print("Model Loaded", FLAGS.check)
+                start_time = time.time()
+                start_batch_idx = i * FLAGS.batch_size
+                end_batch_idx = start_batch_idx + FLAGS.batch_size
+                batch_x = X_train[start_batch_idx: end_batch_idx]
+                batch_y = y_train[start_batch_idx: end_batch_idx]
+
+                if i % (total_batch / 2) == 1 or i == (total_batch - 1):
+                    _, c = sess.run([optimizer, cost],
+                                    feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
+                    # Display logs per epoch step
+                    batch_time = time.time() - start_time
+                    print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
+                          "| batch: [%d" % i, "of %d]" % total_batch,
+                          "| cost =", "{:.3f}".format(c),
+                          "| batch time: %.03f" % batch_time,
+                          "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
                 else:
-                    # If file does not exist, create dir not returning exception if dir exists
-                    os.makedirs(os.path.join(os.getcwd(), 'checkpoint'), exist_ok=True)
-
-                # Training cycle
-                
-                total_batch = int(len(X_train) / FLAGS.batch_size)
-
-                # Loop over all batches
-                for i in range(total_batch):
-
-                    start_time = time.time()
-                    start_batch_idx = i * FLAGS.batch_size
-                    end_batch_idx = start_batch_idx + FLAGS.batch_size
-                    batch_x = X_train[start_batch_idx: end_batch_idx]
-                    batch_y = y_train[start_batch_idx: end_batch_idx]
-                    keep_prob = tf.placeholder(tf.float32)
-
-                    # Run optimization op (backprop) and cost op (to get loss value)
                     sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
 
-                    if i % (total_batch / 2)  == 1 or i == total_batch:
-
-                        # Display logs per epoch step
-                        _, c = sess.run([optimizer, cost],
-                                        feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
-                        batch_time = time.time() - start_time
-                        print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
-                              "| batch: [%d" % i, "of %d]" % total_batch,
-                              "| cost =", "{:.3f}".format(c),
-                              "| batch time: %.03f" % batch_time,
-                              "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
-
-                # Save model state after each epoch
-                saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
-                print("Model Saved", FLAGS.check)
-                print("Accuracy:", _evaluate(X_valid, y_valid))
-            sess.close()
+            # Save model state after each epoch
+            saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
+            print("Model Saved", FLAGS.check)
+            print("Accuracy:", _evaluate(X_valid, y_valid))
 
     print("Optimization Finished!")
     total_time = time.time() - main_start_time
