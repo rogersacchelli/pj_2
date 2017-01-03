@@ -36,24 +36,24 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('start_learning_rate', '0.5', 'Start Learning Rate')
-tf.app.flags.DEFINE_integer('batch_size', '128', 'Batch Size')
-tf.app.flags.DEFINE_integer('epoch_size', '100', 'Epoch Size')
+tf.app.flags.DEFINE_float('start_learning_rate', '0.1', 'Start Learning Rate')
+tf.app.flags.DEFINE_integer('batch_size', '256', 'Batch Size')
+tf.app.flags.DEFINE_integer('epoch_size', '300', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs_adadelta_3.ckpt', 'File name for model saving')
 
-tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test dataset folder')
-tf.app.flags.DEFINE_string('train', 'train.p', 'train dataset')
-tf.app.flags.DEFINE_string('test', 'test.p', 'test dataset')
+tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test data set folder')
+tf.app.flags.DEFINE_string('my_set_dir', 'traffic-signs-data', 'Personal data set folder')
+tf.app.flags.DEFINE_string('train', 'train.p', 'train data set')
+tf.app.flags.DEFINE_string('test', 'test.p', 'test data set')
 
 
 layer_width = {
     'layer_1': 6,
     'layer_2': 16,
-    'layer_3': 36,
-    'fully_connected_1': 120,
-    'fully_connected_2': 84
+    'fully_connected_1': 256,
+    'fully_connected_2': 120
 }
 
 # Store layers weight & bias
@@ -86,11 +86,11 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     samples_per_class = []
     for i in range(n_classes):
         samples_per_class.append(np.sum(train_dict['labels'][:] == i))
-        print("\t Class ", i, "%d:" % samples_per_class[-1], )
+        print("\t Class ", i, ": %d" % samples_per_class[-1], )
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
-    print("Required Memory for validation whole dataset: ",
+    print("Required Memory for validation whole data set: ",
           ((img_dim[0] * img_dim[1] * img_dim[2]) / 1024e2) * n_train * 4, 'MB')
 
     # Multiplot All Classes
@@ -108,15 +108,6 @@ def data_augmentation(dataset):
     # DATA AUGMENTATION RANDOMLY ADDS A SET OF IMAGE
     # TRANSFORMATION TO INCREASE THE NUMBER OF EXAMPLES PER CLASS
     # PROVIDING A IMPROVED DISTRIBUTION OF IMAGES PER CLASS
-
-    def _random_crop(image):
-        pass
-
-
-    def _random_brightness(image):
-        # image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        # image_hsv[:, :, :] +=
-        pass
 
     def _flip_random_90_degrees(image, flip):
         # RANDOM FLIP
@@ -222,7 +213,7 @@ def data_augmentation(dataset):
     samples_per_class = []
     for i in range(n_classes):
         samples_per_class.append(np.sum(dataset['labels'][:] == i))
-        print("\t Class %d:" % samples_per_class[-1], )
+        print("\t Class ", i, ": %d" % samples_per_class[-1], )
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
@@ -235,28 +226,13 @@ def data_augmentation(dataset):
 
     return dataset
 
+
 def normalize_images(dataset):
     # THIS FUNCTION NORMALIZES IMAGES, COMPUTING:
-    # (X - MEAN)/ADJUSTED_STD_DEV WHERE ADJUSTED_STD_DEV = max(ADJUSTED_STD_DEV, 1.0/sqrt(image.NumElements()))
 
-    # DATA TYPE CONVERSION
-    # train['features'] = train['features'].astype(np.float)
-    # test['features'] = test['features'].astype(np.float)
-    #
-    # # NORMALIZATION
-    # for i in range(len(train['features'][:])):
-    #     train['features'][i] = (np.subtract((train['features'][i]), 127.) /
-    #                             (max(np.std((train['features'][i])),
-    #                                  1. / (FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
-    #
-    # for i in range(len(test['features'][:])):
-    #     test['features'][i] = (np.subtract((test['features'][i]), 127.) /
-    #                             (max(np.std((test['features'][i])),
-    #                                  1. / (FLAGS.IMAGE_HEIGHT * FLAGS.IMAGE_WIDTH * FLAGS.NUM_OF_CHAN))))
-
-    dataset['features'] = dataset['features'].astype(dtype='float64')
-    dataset['features'] -= np.mean(dataset['features'], axis=0)
-    dataset['features'] /= np.std(dataset['features'], axis=0)
+    dataset = dataset.astype(dtype='float64')
+    dataset -= np.mean(dataset, axis=0)
+    dataset /= np.std(dataset, axis=0)
 
     return dataset
 
@@ -279,32 +255,6 @@ def shuffle_dataset(dataset):
     dataset['features'], dataset['labels'], dataset['coords'], dataset['sizes'] = \
         shuffle(dataset['features'], dataset['labels'], dataset['coords'], dataset['sizes'])
 
-    # for i in range(len(dataset['features'])):
-    #     # RANDOM INTEGER
-    #     rand_int = random.randint(0, len(dataset['features'])-1)
-    #
-    #     # RANDOM POSITION FROM DATASET
-    #     temp = [dataset['coords'][rand_int], dataset['features'][rand_int],
-    #             dataset['labels'][rand_int], dataset['sizes'][rand_int]]
-    #
-    #     # ASSIGN RANDOM POSITION TO CURRENT POSITION
-    #     dataset['coords'][rand_int] = dataset['coords'][i]
-    #     dataset['features'][rand_int] = dataset['features'][i]
-    #     dataset['labels'][rand_int] = dataset['labels'][i]
-    #     dataset['sizes'][rand_int] = dataset['sizes'][i]
-    #
-    #     # REPLACE CURRENT POSITION FROM RANDOM POSITION
-    #     dataset['coords'][i] = temp[0]
-    #     dataset['features'][i] = temp[1]
-    #     dataset['labels'][i] = temp[2]
-    #     dataset['sizes'][i] = temp[3]
-
-    # # Multiplot All randomized Classes
-    # randomized_classes_dict = {}
-    # for i in range(len(dataset['labels'][:])):
-    #     temp = randomized_classes_dict[i]
-    #     temp.update({i: })
-    #
     plt.figure(figsize=(14, 10))
     for i in range(FLAGS.NUM_OF_CLASSES):
         array_class = np.where(dataset['labels'] == i)
@@ -317,10 +267,10 @@ def shuffle_dataset(dataset):
 
 
 def conv_2d(x, W, b, strides=1):
-    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
+    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='VALID')
     x = tf.nn.bias_add(x, b)
-    #return tf.nn.tanh(x)
-    return tf.nn.relu(x)
+    return tf.nn.tanh(x)
+    #return tf.nn.relu(x)
 
 
 def maxpool_2d(x, k=2):
@@ -348,19 +298,19 @@ def cnn(x, w, b, s=1, dropout=0.5):
     conv2 = maxpool_2d(conv2)
 
     # layer 3 - 8x8x16 -> 8x8x36
-    conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
+    #conv3 = conv_2d(conv2, w['layer_3'], b['layer_3'], s)
     # Max Pooling -> 4x4x46
-    conv3 = maxpool_2d(conv3)
+    #conv3 = maxpool_2d(conv3)
 
     # Fully connected layer 1 - 4*4*36 to 576
     fc1 = tf.reshape(
-        conv3,
+        conv2,
         [-1, w['fully_connected_1'].get_shape().as_list()[0]])
     # FC 1 4000 -> 120
     fc1 = tf.add(
         tf.matmul(fc1, w['fully_connected_1']),
         b['fully_connected_1'])
-    fc1 = tf.nn.tanh(fc1)
+    fc1 = tf.nn.relu(fc1)
 
     # Dropout regularization for FC 1
     drop_fc1 = tf.nn.dropout(fc1, dropout)
@@ -369,12 +319,38 @@ def cnn(x, w, b, s=1, dropout=0.5):
     fc2 = tf.add(
         tf.matmul(drop_fc1, w['fully_connected_2']),
         b['fully_connected_2'])
-    fc2 = tf.nn.tanh(fc2)
-    drop_fc2 = tf.nn.dropout(fc2, dropout)
+    fc2 = tf.nn.relu(fc2)
 
     # Output Layer - class prediction - 512 to 43
-    out = tf.add(tf.matmul(drop_fc2, w['out']), b['out'])
+    out = tf.add(tf.matmul(fc2, w['out']), b['out'])
     return out
+
+
+def get_personal_data(path_to_dataset):
+
+    image_list = os.listdir(path_to_dataset)
+
+    plt.figure(figsize=(14, 10))
+    for i in image_list:
+        img = cv2.imread(i, cv2.COLOR_BGR2RGB)
+        im_resized = cv2.resize(img, [32, 32], interpolation=cv2.CV_INTER_AREA)
+        im_class = i.split('_')[0]
+        try:
+            my_features = np.concatenate((im_resized, im_resized), axis=0)
+        except:
+            my_features = np.concatenate((im_resized), axis=0)
+        try:
+            my_labels = np.concatenate((im_class), axis=0)
+        except:
+            my_labels = np.concatenate((im_class, im_class), axis=0)
+
+        plt.subplot(5, 10, i + 1)
+        plt.title('Class %d' % im_class)
+        plt.imshow(im_resized)
+
+    plt.show()
+
+    return normalize_images(my_features), my_labels
 
 
 def main():
@@ -402,8 +378,8 @@ def main():
     test_data = shuffle_dataset(test_data)
 
     # NORMALIZING DATA TO IMPROVE SGD CONVERGENCE
-    train_data = normalize_images(train_data)
-    test_data = normalize_images(test_data)
+    train_data = normalize_images(train_data['features'])
+    test_data = normalize_images(test_data['features'])
 
     # TRANSFORM SPARSE LABELS MATRIX TO DENSE MATRIX
     # train_data = sparse_to_dense(train_data)
@@ -412,9 +388,6 @@ def main():
     X_train, X_valid, y_train, y_valid = train_test_split(train_data['features'],
                                                           train_data['labels'], test_size=0.3)
 
-    #graph = tf.Graph()
-
-    #with graph.as_default():
     x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
     y = tf.placeholder(tf.int32, None)
     one_hot_y = tf.one_hot(y, FLAGS.NUM_OF_CLASSES)
@@ -424,10 +397,10 @@ def main():
             [5, 5, 3, layer_width['layer_1']], stddev=0.01)),
         'layer_2': tf.Variable(tf.truncated_normal(
             [5, 5, layer_width['layer_1'], layer_width['layer_2']], stddev=0.01)),
-        'layer_3': tf.Variable(tf.truncated_normal(
-            [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.01)),
+        #'layer_3': tf.Variable(tf.truncated_normal(
+        #    [5, 5, layer_width['layer_2'], layer_width['layer_3']], stddev=0.01)),
         'fully_connected_1': tf.Variable(tf.truncated_normal(
-            [576, layer_width['fully_connected_1']])),
+            [400, layer_width['fully_connected_1']])),
         'fully_connected_2': tf.Variable(tf.truncated_normal(
             [layer_width['fully_connected_1'], layer_width['fully_connected_2']])),
         'out': tf.Variable(tf.truncated_normal(
@@ -436,7 +409,7 @@ def main():
     biases = {
         'layer_1': tf.Variable(tf.zeros(layer_width['layer_1'])),
         'layer_2': tf.Variable(tf.zeros(layer_width['layer_2'])),
-        'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
+        #'layer_3': tf.Variable(tf.zeros(layer_width['layer_3'])),
         'fully_connected_1': tf.Variable(tf.zeros(layer_width['fully_connected_1'])),
         'fully_connected_2': tf.Variable(tf.zeros(layer_width['fully_connected_2'])),
         'out': tf.Variable(tf.zeros(FLAGS.NUM_OF_CLASSES))
@@ -444,21 +417,8 @@ def main():
 
     logits = cnn(x, weights, biases)
 
-    # decay_steps = int(FLAGS.epoch_size * (len(train_data['features']) / FLAGS.batch_size))
-    # global_step = tf.Variable(0, trainable=False)
-
-    # leaning_rate = tf.train.exponential_decay(FLAGS.start_learning_rate,
-    #                                           global_step=global_step,
-    #                                           decay_steps=decay_steps,
-    #                                           decay_rate=1e-3,
-    #                                           staircase=False)
-
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, one_hot_y))
-    # optimizer = tf.train.GradientDescentOptimizer(learning_rate=leaning_rate) \
-    #     .minimize(cost, global_step=global_step)
-    optimizer = tf.train.AdagradOptimizer(learning_rate=0.01).minimize(cost)
-
-    # train_prediction = tf.nn.softmax(logits)
+    optimizer = tf.train.AdadeltaOptimizer(learning_rate=FLAGS.start_learning_rate).minimize(cost)
 
     # Create saving object
 
@@ -473,42 +433,39 @@ def main():
         # 0.11 Method
         init = tf.initialize_all_variables()
 
-# Launch the graph
+    def _accuracy(predictions, labels):
+        return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
+                / predictions.shape[0])
+
+    def _evaluate(X_data, y_data):
+
+        correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
+        accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        num_examples = len(X_data)
+
+        total_accuracy = 0
+        session = tf.get_default_session()
+        for offset in range(0, num_examples, FLAGS.batch_size):
+            bat_x, bat_y = X_data[offset:offset + FLAGS.batch_size], \
+                               y_data[offset:offset + FLAGS.batch_size]
+            accuracy = session.run(accuracy_operation, feed_dict={x: bat_x, y: bat_y})
+            total_accuracy += (accuracy * len(bat_x))
+        return total_accuracy / num_examples
+
     with tf.Session() as sess:
         sess.run(init)
 
-        def _accuracy(predictions, labels):
-            return (np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
-                    / predictions.shape[0])
+        total_batch = int(len(X_train) / FLAGS.batch_size)
+        keep_prob = tf.placeholder(tf.float32)
 
-        def _evaluate(X_data, y_data):
-
-            correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
-            accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            num_examples = len(X_data)
-
-            total_accuracy = 0
-            session = tf.get_default_session()
-            for offset in range(0, num_examples, FLAGS.batch_size):
-                bat_x, bat_y = X_data[offset:offset + FLAGS.batch_size], \
-                                   y_data[offset:offset + FLAGS.batch_size]
-                accuracy = session.run(accuracy_operation, feed_dict={x: bat_x, y: bat_y})
-                total_accuracy += (accuracy * len(bat_x))
-            return total_accuracy / num_examples
-
-        # Check for saved models
-        if os.path.exists(os.path.join(os.getcwd(), FLAGS.check)):
-            saver.restore(sess, os.path.join(os.getcwd(), FLAGS.check))
-            print("Model Loaded", FLAGS.check)
+        if os.path.exists(os.path.join(os.curdir, FLAGS.check)):
+            saver.restore(sess, os.path.join(os.curdir, FLAGS.check))
+            print("Model Loaded")
         else:
             # If file does not exist, create dir not returning exception if dir exists
-            os.makedirs(os.path.join(os.getcwd(), 'checkpoint'), exist_ok=True)
-
-        # Training cycle
+            os.makedirs(os.path.join(os.path.curdir, 'checkpoint'), exist_ok=True)
 
         for epoch in range(FLAGS.epoch_size):
-
-            total_batch = int(len(X_train) / FLAGS.batch_size)
 
             # Loop over all batches
             for i in range(total_batch):
@@ -518,31 +475,35 @@ def main():
                 end_batch_idx = start_batch_idx + FLAGS.batch_size
                 batch_x = X_train[start_batch_idx: end_batch_idx]
                 batch_y = y_train[start_batch_idx: end_batch_idx]
-                keep_prob = tf.placeholder(tf.float32)
 
-                # Run optimization op (backprop) and cost op (to get loss value)
-                sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
-
-                if i % 50 == 1:
-                    # Display logs per epoch step
+                if i % (total_batch / 2) == 1 or i == (total_batch - 1):
                     _, c = sess.run([optimizer, cost],
                                     feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
+                    # Display logs per epoch step
                     batch_time = time.time() - start_time
                     print("Epoch:", '[%d' % (epoch + 1), 'of %d]' % FLAGS.epoch_size,
                           "| batch: [%d" % i, "of %d]" % total_batch,
                           "| cost =", "{:.3f}".format(c),
                           "| batch time: %.03f" % batch_time,
                           "| img/sec: %d" % int(FLAGS.batch_size / batch_time))
-                          #"| LR/G_step: %s/%s" % (leaning_rate.eval(), global_step.eval()))
+                else:
+                    sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
 
             # Save model state after each epoch
             saver.save(sess, os.path.join(os.getcwd(), FLAGS.check))
             print("Model Saved", FLAGS.check)
             print("Accuracy:", _evaluate(X_valid, y_valid))
 
-        print("Optimization Finished!")
+        # EVALUATE TEST SET
+            print("Test set accuracy:", _evaluate(test_data['features'], test_data['labels']))
 
-    print("Total Time: ", time.time() - main_start_time)
+        # EVALUATE PERSONAL SET
+            my_feature_set, my_label_set = get_personal_data(FLAGS.my_set_dir)
+            print("My test set accuracy:", _evaluate(my_feature_set, my_label_set))
+
+    print("Optimization Finished!")
+    total_time = time.time() - main_start_time
+    print("Total Time: ", (total_time) / 3600, " hours")
 
 if __name__ == '__main__':
     main()
