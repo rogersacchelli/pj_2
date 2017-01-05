@@ -21,6 +21,9 @@ __doc__ = """
     ------- Project 2 | Self-driving Car ND -------
     ----- Classifying Traffic Signs with CNN ------
     -----------------------------------------------
+
+    Model: Input -> CONV -> RELU -> LRN -> MAX_POOL -> CONV -> RELU -> LRN -> MAX_POOL -> FLAT -> FC -> FC -> OUT
+
     """
 
 
@@ -36,15 +39,15 @@ tf.app.flags.DEFINE_integer('NUM_OF_CHAN', '3', 'IMAGE LAYERS')
 tf.app.flags.DEFINE_integer('NUM_OF_CLASSES', '43', 'NUMBER OF CLASSES')
 
 # CNN PARAMETERS
-tf.app.flags.DEFINE_float('start_learning_rate', '0.1', 'Start Learning Rate')
+tf.app.flags.DEFINE_float('start_learning_rate', '1.0', 'Start Learning Rate')
 tf.app.flags.DEFINE_integer('batch_size', '256', 'Batch Size')
 tf.app.flags.DEFINE_integer('epoch_size', '300', 'Epoch Size')
 
 # FILE HANDLING FLAGS
-tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs_adadelta_3.ckpt', 'File name for model saving')
+tf.app.flags.DEFINE_string('check', 'checkpoint/leNet_for_traffic_signs_adadelta_test2.ckpt', 'File name for model saving')
 
 tf.app.flags.DEFINE_string('dataset_dir', 'traffic-signs-data', 'Train and test data set folder')
-tf.app.flags.DEFINE_string('my_set_dir', 'traffic-signs-data', 'Personal data set folder')
+tf.app.flags.DEFINE_string('my_set_dir', 'traffic-signs-data/my_test_set', 'Personal data set folder')
 tf.app.flags.DEFINE_string('train', 'train.p', 'train data set')
 tf.app.flags.DEFINE_string('test', 'test.p', 'test data set')
 
@@ -52,8 +55,8 @@ tf.app.flags.DEFINE_string('test', 'test.p', 'test data set')
 layer_width = {
     'layer_1': 6,
     'layer_2': 16,
-    'fully_connected_1': 256,
-    'fully_connected_2': 120
+    'fully_connected_1': 120,
+    'fully_connected_2': 84
 }
 
 # Store layers weight & bias
@@ -86,7 +89,7 @@ def read_pickle(train=os.path.join(FLAGS.dataset_dir, FLAGS.train),
     samples_per_class = []
     for i in range(n_classes):
         samples_per_class.append(np.sum(train_dict['labels'][:] == i))
-        print("\t Class ", i, ": %d" % samples_per_class[-1], )
+        print("\t Class", i, ": %d" % samples_per_class[-1], )
 
     # Calculate Memory for whole set of training
     # Every feature will be mapped to float (4 Bytes)
@@ -269,8 +272,8 @@ def shuffle_dataset(dataset):
 def conv_2d(x, W, b, strides=1):
     x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='VALID')
     x = tf.nn.bias_add(x, b)
-    return tf.nn.tanh(x)
-    #return tf.nn.relu(x)
+    #return tf.nn.tanh(x)
+    return tf.nn.relu(x)
 
 
 def maxpool_2d(x, k=2):
@@ -281,6 +284,10 @@ def maxpool_2d(x, k=2):
         padding='SAME')
 
 
+def lrn(conv, radius=2, alpha=2e-05, beta=0.75, bias=1.0):
+    return tf.nn.local_response_normalization(conv, depth_radius=radius, alpha=alpha, beta=beta, bias=bias)
+
+
 # MODEL FOR CNN
 def cnn(x, w, b, s=1, dropout=0.5):
     # CONVOLUTIONAL NEURAL NET
@@ -289,11 +296,19 @@ def cnn(x, w, b, s=1, dropout=0.5):
 
     # layer 1 - 32x32x3 to 32x32x6
     conv1 = conv_2d(x, w['layer_1'], b['layer_1'], s)
+
+    # Local Response Normalization
+    conv1 = lrn(conv=conv1)
+
     # Max Pooling -> 16x16x6
     conv1 = maxpool_2d(conv1)
 
     # layer 2 - 16x16x6 -> 16x16x16
     conv2 = conv_2d(conv1, w['layer_2'], b['layer_2'], s)
+
+    # Local Response Normalization
+    conv2 = lrn(conv=conv2)
+
     # Max Pooling -> 8x8x16
     conv2 = maxpool_2d(conv2)
 
@@ -327,25 +342,24 @@ def cnn(x, w, b, s=1, dropout=0.5):
 
 
 def get_personal_data(path_to_dataset):
+    image_list = os.listdir(os.path.join(os.getcwd(), path_to_dataset))
 
-    image_list = os.listdir(path_to_dataset)
+    import scipy.misc
+
+    my_features = np.zeros(shape=(len(image_list), 32, 32, 3), dtype=np.float32)
+    my_labels = np.zeros(shape=(len(image_list)), dtype=np.int8)
 
     plt.figure(figsize=(14, 10))
-    for i in image_list:
-        img = cv2.imread(i, cv2.COLOR_BGR2RGB)
-        im_resized = cv2.resize(img, [32, 32], interpolation=cv2.CV_INTER_AREA)
-        im_class = i.split('_')[0]
-        try:
-            my_features = np.concatenate((im_resized, im_resized), axis=0)
-        except:
-            my_features = np.concatenate((im_resized), axis=0)
-        try:
-            my_labels = np.concatenate((im_class), axis=0)
-        except:
-            my_labels = np.concatenate((im_class, im_class), axis=0)
+    for i, v in enumerate(image_list):
+        img_path = os.path.join(os.getcwd(), FLAGS.my_set_dir, v)
+        img = scipy.misc.imread(img_path)
+        im_resized = scipy.misc.imresize(img, size=(32, 32))
+        im_class = v.split('_')[0]
+        my_features[i, :, :] = im_resized
+        my_labels[i] = int(im_class)
 
-        plt.subplot(5, 10, i + 1)
-        plt.title('Class %d' % im_class)
+        plt.subplot(5, 4, i + 1)
+        plt.title('Class %s' % im_class)
         plt.imshow(im_resized)
 
     plt.show()
@@ -378,14 +392,14 @@ def main():
     test_data = shuffle_dataset(test_data)
 
     # NORMALIZING DATA TO IMPROVE SGD CONVERGENCE
-    train_data = normalize_images(train_data['features'])
-    test_data = normalize_images(test_data['features'])
+    train_data_features = normalize_images(train_data['features'])
+    test_data_features = normalize_images(test_data['features'])
 
     # TRANSFORM SPARSE LABELS MATRIX TO DENSE MATRIX
     # train_data = sparse_to_dense(train_data)
     # test_data = sparse_to_dense(test_data)
 
-    X_train, X_valid, y_train, y_valid = train_test_split(train_data['features'],
+    X_train, X_valid, y_train, y_valid = train_test_split(train_data_features,
                                                           train_data['labels'], test_size=0.3)
 
     x = tf.placeholder(tf.float32, shape=(None, FLAGS.IMAGE_HEIGHT, FLAGS.IMAGE_WIDTH, FLAGS.NUM_OF_CHAN))
@@ -495,15 +509,15 @@ def main():
             print("Accuracy:", _evaluate(X_valid, y_valid))
 
         # EVALUATE TEST SET
-            print("Test set accuracy:", _evaluate(test_data['features'], test_data['labels']))
+        print("Test set accuracy:", _evaluate(test_data_features, test_data['labels']))
 
         # EVALUATE PERSONAL SET
-            my_feature_set, my_label_set = get_personal_data(FLAGS.my_set_dir)
-            print("My test set accuracy:", _evaluate(my_feature_set, my_label_set))
+        my_feature_set, my_label_set = get_personal_data(FLAGS.my_set_dir)
+        print("My test set accuracy:", _evaluate(my_feature_set, my_label_set))
 
     print("Optimization Finished!")
     total_time = time.time() - main_start_time
-    print("Total Time: ", (total_time) / 3600, " hours")
+    print("Total Time: ", total_time / 3600, " hours")
 
 if __name__ == '__main__':
     main()
